@@ -1,0 +1,19 @@
+{# Kafka-specific release notes template.
+   Extends the DA186-compliant base template with Kafka product links
+   and compatibility table structure. #}
+{% extends "base.md.j2" %}
+
+{% block intro_links %}
+[Charmhub](https://charmhub.io/kafka) | [Deploy guide](https://canonical.com/data/docs/kafka/iaas/h-deploy) | [Upgrade instructions](https://canonical.com/data/docs/kafka/iaas/h-upgrade) | [System requirements](https://canonical.com/data/docs/kafka/iaas/r-system-requirements)
+{% endblock %}
+
+{% block compatibility %}
+Principal charms support the latest LTS series `24.04` only.
+
+| Charm | Revision | Hardware architecture | Juju version | Artefacts |
+| :--- | :--- | :--- | :--- | :--- |
+| Charmed Apache Kafka | | AMD64 | Juju 3.6+ | Distribution: TODO <br> Snap: TODO |
+| Charmed Apache Kafka Connect | | AMD64 | Juju 3.6+ | Distribution: TODO <br> Snap: TODO |
+| Charmed Karapace | | AMD64 | Juju 3.6+ | Snap: TODO |
+| Charmed Kafka UI | | AMD64 | Juju 3.6+ | Snap: TODO |
+{% endblock %}

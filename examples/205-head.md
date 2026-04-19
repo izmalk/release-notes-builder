@@ -1,0 +1,93 @@
+# main
+**Apr 19, 2026**
+<!-- TODO: Write a brief summary of the most important changes in this release. -->
+
+[Charmhub](https://charmhub.io/kafka) | [Deploy guide](https://canonical.com/data/docs/kafka/iaas/h-deploy) | [Upgrade instructions](https://canonical.com/data/docs/kafka/iaas/h-upgrade) | [System requirements](https://canonical.com/data/docs/kafka/iaas/r-system-requirements)
+
+## Other improvements
+
+* Add TIOBE to CI ([PR #327](https://github.com/canonical/kafka-operator/pull/327)) ([d89c169](https://github.com/canonical/kafka-operator/commit/d89c1698d265788adf440a5fd9d28f942d30e99b))
+* [Docs] Update How-to manage units guide ([PR #332](https://github.com/canonical/kafka-operator/pull/332)) ([84da171](https://github.com/canonical/kafka-operator/commit/84da171f3e1b9d9a65bd110e321be942206e1bab))
+* \[[DPE-6436](https://warthogs.atlassian.net/browse/DPE-6436)\] fix: use pathops for proper cleanup of TLS artifacts ([PR #334](https://github.com/canonical/kafka-operator/pull/334)) ([9bee91d](https://github.com/canonical/kafka-operator/commit/9bee91dceee96609e6dadddca843e2bf25177318))
+* \[[DPE-6987](https://warthogs.atlassian.net/browse/DPE-6987)\] fix: add readiness check for TLS handler ([PR #335](https://github.com/canonical/kafka-operator/pull/335)) ([bec7d43](https://github.com/canonical/kafka-operator/commit/bec7d435ac4024ea70c7677eaadfe08b92c8a17f))
+* [discourse-gatekeeper] Migrate charm docs ([PR #336](https://github.com/canonical/kafka-operator/pull/336)) ([83f34df](https://github.com/canonical/kafka-operator/commit/83f34df6755a78a2d81170feef400f570f42ba53))
+* [discourse-gatekeeper] Migrate charm docs ([PR #337](https://github.com/canonical/kafka-operator/pull/337)) ([4c416c2](https://github.com/canonical/kafka-operator/commit/4c416c24975175f5cb231f188f2e5c84c21736c1))
+* \[[DPE-7147](https://warthogs.atlassian.net/browse/DPE-7147)\] feat: adapt MTLS support to DA150 spec ([PR #344](https://github.com/canonical/kafka-operator/pull/344)) ([4a6846a](https://github.com/canonical/kafka-operator/commit/4a6846a284d46f8b850d12eef4d2582b1bb4f7fb))
+* \[[DPE-7246](https://warthogs.atlassian.net/browse/DPE-7246)\] feat: Migrate docs to RTD ([PR #342](https://github.com/canonical/kafka-operator/pull/342)) ([f2336ec](https://github.com/canonical/kafka-operator/commit/f2336ec81fb01661ca998e8355e7180bea9280e9))
+* chore: Update the documentation badge in README ([PR #346](https://github.com/canonical/kafka-operator/pull/346)) ([89863fa](https://github.com/canonical/kafka-operator/commit/89863faeb4ff6140ba8a9b6265be89e1cc3d4921))
+* \[[DPE-7363](https://warthogs.atlassian.net/browse/DPE-7363)\] feat: remove zookeeper & use Kafka 4 snap ([PR #339](https://github.com/canonical/kafka-operator/pull/339)) ([d1e11b2](https://github.com/canonical/kafka-operator/commit/d1e11b2bc4e9209b9c02fa3044e5cf8b308e5868))
+* \[[DPE-7246](https://warthogs.atlassian.net/browse/DPE-7246)\] fix: exclude docs changes from release pipeline ([PR #348](https://github.com/canonical/kafka-operator/pull/348)) ([84121ec](https://github.com/canonical/kafka-operator/commit/84121ec1b00f7fb13a325941dcc6d2394adaa8b7))
+* \[[DPE-7142](https://warthogs.atlassian.net/browse/DPE-7142)\] \[[KIP-1030](https://warthogs.atlassian.net/browse/KIP-1030)\] Update configs ([PR #345](https://github.com/canonical/kafka-operator/pull/345)) ([1561a86](https://github.com/canonical/kafka-operator/commit/1561a86e63966271ef3a8b1b7b2a235ddf9180d8))
+* \[[DPE-7141](https://warthogs.atlassian.net/browse/DPE-7141)\] JBOD support ([PR #349](https://github.com/canonical/kafka-operator/pull/349)) ([8c01ddd](https://github.com/canonical/kafka-operator/commit/8c01ddd23d9e65bd3ba3b67cfa24589c58291679))
+* \[[DPE-7244](https://warthogs.atlassian.net/browse/DPE-7244)\] docs: Add landing pages ([PR #352](https://github.com/canonical/kafka-operator/pull/352)) ([7a8f8ab](https://github.com/canonical/kafka-operator/commit/7a8f8abbee3ad2993d9270623bd4887ceed710bb))
+* Add optional flags to provides endpoints ([PR #358](https://github.com/canonical/kafka-operator/pull/358)) ([3b50f7e](https://github.com/canonical/kafka-operator/commit/3b50f7e1d8da118b8affa1d82dc07f7d2e800d77))
+* fix: Fix the product link in RTD docs header ([PR #361](https://github.com/canonical/kafka-operator/pull/361)) ([cd6fd08](https://github.com/canonical/kafka-operator/commit/cd6fd088cc3e253c70337a45b69d3100800f149c))
+* \[[DPE-4428](https://warthogs.atlassian.net/browse/DPE-4428)\] feat: Add CONF, BIN, DATA, LOGS env-vars to /etc/environment ([PR #359](https://github.com/canonical/kafka-operator/pull/359)) ([8787b33](https://github.com/canonical/kafka-operator/commit/8787b33a9b50270947fcd6c8d07fbe5b06ee52ee))
+* \[[DPE-7284](https://warthogs.atlassian.net/browse/DPE-7284)\] feat: add support for secret-based user management ([PR #360](https://github.com/canonical/kafka-operator/pull/360)) ([f761416](https://github.com/canonical/kafka-operator/commit/f761416d7219070848c19fe1cf71b65106f65ec4))
+* docs: Update README.md for Kafka 4 ([PR #369](https://github.com/canonical/kafka-operator/pull/369)) ([9a5b126](https://github.com/canonical/kafka-operator/commit/9a5b126cf199480469d1dfa9be150a7c9d347e78))
+* \[[DPE-7413](https://warthogs.atlassian.net/browse/DPE-7413)\] Extend SSL mapping validation ([PR #354](https://github.com/canonical/kafka-operator/pull/354)) ([2b72757](https://github.com/canonical/kafka-operator/commit/2b72757fc61f732ed198d9c1f1c2aede1393d19b))
+* [PoC] Sync to k8s ([PR #355](https://github.com/canonical/kafka-operator/pull/355)) ([ca69597](https://github.com/canonical/kafka-operator/commit/ca695979b81faf037ba07ed0ff39f684cea1991f))
+* \[[DPE-7616](https://warthogs.atlassian.net/browse/DPE-7616)\] ci: add HA tests for controller ([PR #371](https://github.com/canonical/kafka-operator/pull/371)) ([5ffef39](https://github.com/canonical/kafka-operator/commit/5ffef39713f52b0f23396c0d420fe7a1cf26e594))
+* \[[DPE-7657](https://warthogs.atlassian.net/browse/DPE-7657)\] feat: add broker_active check ([PR #375](https://github.com/canonical/kafka-operator/pull/375)) ([162b69c](https://github.com/canonical/kafka-operator/commit/162b69cbfe492b148c645640e8f7b01c56c9c39c))
+* \[[DPE-7526](https://warthogs.atlassian.net/browse/DPE-7526)\] feat: use multiple TLS interfaces for internal/external ([PR #353](https://github.com/canonical/kafka-operator/pull/353)) ([5f0e944](https://github.com/canonical/kafka-operator/commit/5f0e944fa8783911a2dcb00f89d93533f9f55744))
+* Make sync manual ([PR #382](https://github.com/canonical/kafka-operator/pull/382)) ([57b6f2e](https://github.com/canonical/kafka-operator/commit/57b6f2e724a6036c15cb7bd8152580380a14b9c2))
+* \[[DPE-7150](https://warthogs.atlassian.net/browse/DPE-7150)\] Refresh v3 ([PR #380](https://github.com/canonical/kafka-operator/pull/380)) ([0740189](https://github.com/canonical/kafka-operator/commit/0740189c386993ce84122841c7f250bd9f2ed7be))
+* \[[DPE-7522](https://warthogs.atlassian.net/browse/DPE-7522)\] feat: add HA during CA rotation ([PR #378](https://github.com/canonical/kafka-operator/pull/378)) ([daddbf2](https://github.com/canonical/kafka-operator/commit/daddbf28f83d1c7847eed3873758ec1f555efc06))
+* Update release workflow for track 4/* ([PR #392](https://github.com/canonical/kafka-operator/pull/392)) ([213db1e](https://github.com/canonical/kafka-operator/commit/213db1e2b661ca7ba65bcff9b0f320e5da41d548))
+* fix: Add missing needs ([PR #398](https://github.com/canonical/kafka-operator/pull/398)) ([7ef3771](https://github.com/canonical/kafka-operator/commit/7ef37718da74fa7b66c90cb06b8f6566ec3ad43d))
+* \[[DPE-7846](https://warthogs.atlassian.net/browse/DPE-7846)\] fix: secrets not set issue in RelationState.update ([PR #387](https://github.com/canonical/kafka-operator/pull/387)) ([2c6b6b3](https://github.com/canonical/kafka-operator/commit/2c6b6b309944d282eb17c25c39afc5c2731fba44))
+* \[[DPE-7987](https://warthogs.atlassian.net/browse/DPE-7987)\] fix: race condition in internal TLS setup ([PR #399](https://github.com/canonical/kafka-operator/pull/399)) ([fa7388d](https://github.com/canonical/kafka-operator/commit/fa7388d595c0b012e3c0ab874114906aec451db3))
+* \[[DPE-4546](https://warthogs.atlassian.net/browse/DPE-4546)\] fix: juju remove-unit app/leader breaks TLS ([PR #400](https://github.com/canonical/kafka-operator/pull/400)) ([0b0c63a](https://github.com/canonical/kafka-operator/commit/0b0c63abb0087b14efc7721904fbdf4b2b6be59b))
+* docs: change broken link in security.md ([PR #402](https://github.com/canonical/kafka-operator/pull/402)) ([1286030](https://github.com/canonical/kafka-operator/commit/1286030a3ce4c456a2b3a2435069b694b126a12e))
+* \[[DPE-7110](https://warthogs.atlassian.net/browse/DPE-7110)\] feat: add support for Juju spaces ([PR #385](https://github.com/canonical/kafka-operator/pull/385)) ([e7f0e17](https://github.com/canonical/kafka-operator/commit/e7f0e174e942d670b36b2436f6101c5791be70f7))
+* Update monitoring for kafka 4 ([PR #394](https://github.com/canonical/kafka-operator/pull/394)) ([23e8e99](https://github.com/canonical/kafka-operator/commit/23e8e990b30db151209961f8ba177f8139ec9393))
+* ci: remove lib-check ([PR #407](https://github.com/canonical/kafka-operator/pull/407)) ([269b9cc](https://github.com/canonical/kafka-operator/commit/269b9cc609d9563141e6730e925e13b4c435224a))
+* \[[DPE-7138](https://warthogs.atlassian.net/browse/DPE-7138)\] Switch to kafka-python ([PR #401](https://github.com/canonical/kafka-operator/pull/401)) ([647dbdd](https://github.com/canonical/kafka-operator/commit/647dbdd6e37f684e734b962d3606675c5dc40fbe))
+* \[[DPE-7583](https://warthogs.atlassian.net/browse/DPE-7583)\] Split metadata.log.dir from log.dirs ([PR #365](https://github.com/canonical/kafka-operator/pull/365)) ([a8ef884](https://github.com/canonical/kafka-operator/commit/a8ef8847df60f6669fdf1be2162a8fcf91bf9800))
+* docs: Prepare Kafka v.4 initial documentation ([PR #403](https://github.com/canonical/kafka-operator/pull/403)) ([ae042bd](https://github.com/canonical/kafka-operator/commit/ae042bd2e494f93f10c25c91597d72ac034e6d4c))
+* docs: Update Charmhub description ([PR #412](https://github.com/canonical/kafka-operator/pull/412)) ([0cf9d73](https://github.com/canonical/kafka-operator/commit/0cf9d731585ec7073d930345578d7c80b04c8a97))
+* \[[DPE-8031](https://warthogs.atlassian.net/browse/DPE-8031)\] feat: add Terraform charm module ([PR #408](https://github.com/canonical/kafka-operator/pull/408)) ([1d0d857](https://github.com/canonical/kafka-operator/commit/1d0d85789000ebcd23a5d59d33ffa895e03c4c2d))
+* \[[DPE-7839](https://warthogs.atlassian.net/browse/DPE-7839)\] Refactor config changed ([PR #409](https://github.com/canonical/kafka-operator/pull/409)) ([5497d1e](https://github.com/canonical/kafka-operator/commit/5497d1e9945bbaa95b4095178d73b6e239193272))
+* docs: Create SECURITY.md ([PR #419](https://github.com/canonical/kafka-operator/pull/419)) ([1cbe13f](https://github.com/canonical/kafka-operator/commit/1cbe13f8abc44938bed1aa0e86c3765cbcfad1f8))
+* docs: Update docs README badge ([PR #420](https://github.com/canonical/kafka-operator/pull/420)) ([246c827](https://github.com/canonical/kafka-operator/commit/246c82735b0f39d35ed72f0b55413bbe720ca4ea))
+* docs: Enable sequential nav buttons ([PR #422](https://github.com/canonical/kafka-operator/pull/422)) ([b0b73a1](https://github.com/canonical/kafka-operator/commit/b0b73a1e045bcc05abd3426c42725dab73c6ad84))
+* \[[DPE-8311](https://warthogs.atlassian.net/browse/DPE-8311)\] refactor: remove deployment mode logic from the TF module ([PR #418](https://github.com/canonical/kafka-operator/pull/418)) ([3971095](https://github.com/canonical/kafka-operator/commit/3971095b7f00c103a04141969810903291d55a55))
+* docs: Home page improvements ([PR #426](https://github.com/canonical/kafka-operator/pull/426)) ([f79466e](https://github.com/canonical/kafka-operator/commit/f79466ede7c1c1a6b995760a8394fba3e8950a03))
+* \[[DPE-8312](https://warthogs.atlassian.net/browse/DPE-8312)\] feat: auto-balance ([PR #414](https://github.com/canonical/kafka-operator/pull/414)) ([cc78c0c](https://github.com/canonical/kafka-operator/commit/cc78c0c25c44c8c06098ec821220e1d86bbe246c))
+* \[[DPE-8529](https://warthogs.atlassian.net/browse/DPE-8529)\] feat: migrate to data_interfaces V1 ([PR #423](https://github.com/canonical/kafka-operator/pull/423)) ([49a120f](https://github.com/canonical/kafka-operator/commit/49a120ffabdee4fa4c4e8f90e393cca04f3d6450))
+* chore: sync with k8s fixes and enhancements ([PR #434](https://github.com/canonical/kafka-operator/pull/434)) ([6f93b1a](https://github.com/canonical/kafka-operator/commit/6f93b1a69799111b49bda0b0d3bd07970c1155db))
+* \[[DPE-7790](https://warthogs.atlassian.net/browse/DPE-7790)\] chore: rename internal users, use hyphen ([PR #390](https://github.com/canonical/kafka-operator/pull/390)) ([47f2f49](https://github.com/canonical/kafka-operator/commit/47f2f4987098e0a7f886c5a95cab035b93f1d2b4))
+* rename tests ([PR #432](https://github.com/canonical/kafka-operator/pull/432)) ([cefd215](https://github.com/canonical/kafka-operator/commit/cefd215f26fab97341cd3720b62162ede351298d))
+* \[[DPE-9033](https://warthogs.atlassian.net/browse/DPE-9033)\] chore: update TF provider to v1.0+ and TLS to 1/stable ([PR #442](https://github.com/canonical/kafka-operator/pull/442)) ([638717e](https://github.com/canonical/kafka-operator/commit/638717e1279c24b1be0df8d3fb4109e11cb15960))
+* docs: Home page remodeling ([PR #448](https://github.com/canonical/kafka-operator/pull/448)) ([4752587](https://github.com/canonical/kafka-operator/commit/4752587ee38cea5a5689e6d1d31e0cf9cc89ba99))
+* chore: bump snap to rev. 67 ([PR #445](https://github.com/canonical/kafka-operator/pull/445)) ([716b60b](https://github.com/canonical/kafka-operator/commit/716b60b0c68c08af931c5894b675a8c3c41caac4))
+* Fix the discourse link ([PR #460](https://github.com/canonical/kafka-operator/pull/460)) ([cf9b6ac](https://github.com/canonical/kafka-operator/commit/cf9b6ac1bb50b5e878faa9f269968b3611ba1757))
+* docs: Add GA and cookie consent ([PR #459](https://github.com/canonical/kafka-operator/pull/459)) ([e48651b](https://github.com/canonical/kafka-operator/commit/e48651b8dc7245c7d036183193a97f912b2fe600))
+* Update baseurl for sitemaps to work correctly ([PR #455](https://github.com/canonical/kafka-operator/pull/455)) ([bed988d](https://github.com/canonical/kafka-operator/commit/bed988dcbf20607eedc0d673430a358cc3ffd62d))
+* \[[DPE-9107](https://warthogs.atlassian.net/browse/DPE-9107)\] feat: add machines support to TF module ([PR #463](https://github.com/canonical/kafka-operator/pull/463)) ([21de8ed](https://github.com/canonical/kafka-operator/commit/21de8ed3128b2c9e0967f957012b1da21b2737a0))
+* \[[DPE-8849](https://warthogs.atlassian.net/browse/DPE-8849)\] docs: add how-to guide for Kafka UI ([PR #433](https://github.com/canonical/kafka-operator/pull/433)) ([eae4cc2](https://github.com/canonical/kafka-operator/commit/eae4cc210c239f5bb87deb72563cba6bd6d639b3))
+* \[[DPE-8940](https://warthogs.atlassian.net/browse/DPE-8940)\] add OAuth integration tests and docs ([PR #439](https://github.com/canonical/kafka-operator/pull/439)) ([94fc998](https://github.com/canonical/kafka-operator/commit/94fc9987a642357b192d121ca57cb1b937b903f8))
+* docs: Create PR template ([PR #417](https://github.com/canonical/kafka-operator/pull/417)) ([ad20491](https://github.com/canonical/kafka-operator/commit/ad2049185a8c39276de44e74e8a3ba81ece0573d))
+* docs: Add autogenerated metadata description ([PR #462](https://github.com/canonical/kafka-operator/pull/462)) ([0c2ac8f](https://github.com/canonical/kafka-operator/commit/0c2ac8f734102debc5f0b12130e82b111e97199c))
+* ci: unpin temp. juju & lxd workarounds ([PR #467](https://github.com/canonical/kafka-operator/pull/467)) ([77a9d6c](https://github.com/canonical/kafka-operator/commit/77a9d6c4c5a04f8c7a84d3d97ef5a358d15a60a3))
+* build: bump rust to latest stable ([PR #469](https://github.com/canonical/kafka-operator/pull/469)) ([188a736](https://github.com/canonical/kafka-operator/commit/188a7360041044da1bbcfdd49ebe547852c91281))
+* docs: Fix 404 error page rendering ([PR #471](https://github.com/canonical/kafka-operator/pull/471)) ([6c892ed](https://github.com/canonical/kafka-operator/commit/6c892edea689fda1b7ba25ec0d8e12f79b106776))
+* docs: v.4 Tutorial fixes after testing ([PR #454](https://github.com/canonical/kafka-operator/pull/454)) ([f2b8e17](https://github.com/canonical/kafka-operator/commit/f2b8e17331ddb9374eba5dd1a193359d333fc381))
+* \[[DPE-9430](https://warthogs.atlassian.net/browse/DPE-9430)\] docs: Update cookie banner ([PR #475](https://github.com/canonical/kafka-operator/pull/475)) ([40135e3](https://github.com/canonical/kafka-operator/commit/40135e38326fc44ffc1ba36c672441601bf6624b))
+* \[[DPE-9434](https://warthogs.atlassian.net/browse/DPE-9434)\] add promote workflow ([PR #477](https://github.com/canonical/kafka-operator/pull/477)) ([d231338](https://github.com/canonical/kafka-operator/commit/d23133800a00efc55c8deea3c93b18380092ecf6))
+* fix: use full chain in test_certificate_transfer ([PR #479](https://github.com/canonical/kafka-operator/pull/479)) ([df663a0](https://github.com/canonical/kafka-operator/commit/df663a0510670f60d4351650fe5ead742f3dcbb9))
+* \[[DPE-9523](https://warthogs.atlassian.net/browse/DPE-9523)\] docs: Update docs to deploy stable risk when possible ([PR #483](https://github.com/canonical/kafka-operator/pull/483)) ([c2fe594](https://github.com/canonical/kafka-operator/commit/c2fe594f29f0f83f89feeedc8e661b20190b024a))
+* \[[DPE-9434](https://warthogs.atlassian.net/browse/DPE-9434)\] Add release trigger ([PR #482](https://github.com/canonical/kafka-operator/pull/482)) ([44c69dd](https://github.com/canonical/kafka-operator/commit/44c69dd4daf155304ca10576678cf405e4ce3ac1))
+* \[[DPE-9362](https://warthogs.atlassian.net/browse/DPE-9362)\] docs: Kafka 4 release notes ([PR #476](https://github.com/canonical/kafka-operator/pull/476)) ([2750ba7](https://github.com/canonical/kafka-operator/commit/2750ba767225da907426ba2e2ed3e360d3cba240))
+
+## Compatibility
+
+Principal charms support the latest LTS series `24.04` only.
+
+| Charm | Revision | Hardware architecture | Juju version | Artefacts |
+| :--- | :--- | :--- | :--- | :--- |
+| Charmed Apache Kafka | | AMD64 | Juju 3.6+ | Distribution: TODO <br> Snap: TODO |
+| Charmed Apache Kafka Connect | | AMD64 | Juju 3.6+ | Distribution: TODO <br> Snap: TODO |
+| Charmed Karapace | | AMD64 | Juju 3.6+ | Snap: TODO |
+| Charmed Kafka UI | | AMD64 | Juju 3.6+ | Snap: TODO |
+

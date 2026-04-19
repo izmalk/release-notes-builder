@@ -1,0 +1,51 @@
+{# DA186-compliant release notes base template.
+   Product-specific templates should {% extends "base.md.j2" %} and override
+   the blocks marked "TODO" below. #}
+{% block title -%}
+# {{ title }}
+{%- endblock %}
+
+{% block date_line -%}
+**{{ date }}**
+{%- endblock %}
+
+{% block introduction %}
+<!-- TODO: Write a brief summary of the most important changes in this release. -->
+
+{% block intro_links %}
+[Charmhub](TODO) | [Deploy guide](TODO) | [Upgrade instructions](TODO) | [System requirements](TODO)
+{% endblock %}
+{% endblock %}
+{% for category in category_order %}
+{% if categories.get(category) %}
+
+## {{ category }}
+
+{% for entry in categories[category] %}
+* {% if entry.jira_ids %}{% for jira in entry.jira_ids %}\[[{{ jira }}](https://warthogs.atlassian.net/browse/{{ jira }})\] {% endfor %}{% endif %}{{ entry.message }}{% if entry.pr_number %} ([PR #{{ entry.pr_number }}]({{ entry.pr_url }})){% endif %}{% if entry.commit_sha %} ([{{ entry.commit_sha[:7] }}]({{ entry.commit_url }})){% endif %}
+
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+## Compatibility
+
+{% block compatibility %}
+<!-- TODO: Fill in compatibility information for this release. -->
+
+| Component | Revision | Hardware architecture | Artefacts |
+| :--- | :--- | :--- | :--- |
+| | | | |
+| | | | |
+| | | | |
+| | | | |
+| | | | |
+{% endblock %}
+
+{% block known_issues %}
+{# Uncomment and populate if there are known issues for this release.
+## Known issues
+
+* None at this time.
+#}
+{% endblock %}
