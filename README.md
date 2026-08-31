@@ -206,8 +206,14 @@ release-notes-builder/
 ├── templates/
 │   ├── base.md.j2                  # Base DA186-compliant template
 │   └── kafka.md.j2                 # Kafka product extension
-├── DA186 - Release notes for Data charms.md   # Spec reference
-├── Example-release-notes-spec.md              # PostgreSQL example
+├── examples/
+│   ├── DA186 - Release notes for Data charms.md   # Spec reference
+│   ├── Example-release-notes-spec.md              # PostgreSQL example
+│   ├── 205-248.md / 205-248-prs.md / 205-head.md   # Sample generated outputs
+├── .github/
+│   └── skills/
+│       └── release-notes/
+│           └── SKILL.md            # Agentic skill (see above)
 └── README.md                       # This file
 ```
 
