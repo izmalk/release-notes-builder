@@ -149,6 +149,38 @@ Create a new file that extends the base:
 
 See `templates/kafka.md.j2` for a working example.
 
+## Agentic skill: automatic release notes
+
+This repository ships an agent skill (`.github/skills/release-notes/`) that
+automates the full DA186 release-notes workflow. Point your AI agent at one
+or multiple repositories and it will:
+
+1. Resolve the commit range per repo (default branch; from the most recent
+   release/tag or the last documented release notes in the docs, to the
+   branch HEAD — or user-specified refs).
+2. Run `build_release_notes.py` per repository to gather and categorise
+   changes.
+3. Merge the per-repo drafts into a single product document directly (the
+   agent reads each draft and reorganises it under per-component headings) —
+   each component gets its own set of categories; empty components/categories
+   are omitted. There is no separate merge script: the agent has to read
+   every draft in full to polish it anyway, so a mechanical pre-merge step
+   would just duplicate that work and risks its own formatting bugs.
+4. Polish the draft (duplicates, miscategorised entries, false Jira-ID
+   matches, formatting) without altering the facts, querying the user on
+   ambiguous cases.
+5. Write the introduction (1–3 paragraphs) and populate the Compatibility
+   section from repo sources of truth (`charmcraft.yaml`, `metadata.yaml`,
+   snap/rock metadata, release tags).
+6. Save the result to `release-notes/<product>-<to-ref>.md` for review.
+
+Nothing is ever pushed or posted — all output stays in this local repository.
+
+Invoke it from the agent chat with, e.g.:
+
+> Generate release notes for canonical/kafka-operator and
+> canonical/kafka-k8s-operator from rev247 to rev248
+
 ## Truncation warning
 
 The GitHub Compare API returns at most **250 commits** per request. If the
