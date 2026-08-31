@@ -46,6 +46,15 @@ CATEGORY_ORDER: list[str] = [
 # Jira ticket ID pattern (e.g. "DPE-1234").
 JIRA_TICKET_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
 
+# Prefixes that match JIRA_TICKET_RE but are NOT Jira ticket IDs, so they must
+# never be linked as one. CVE (Common Vulnerabilities and Exposures) IDs are
+# the most common false positive here (e.g. "CVE-2026" in a dependency-bump
+# PR title, from the truncated "CVE-YYYY-NNNNN" scheme). Other known false
+# positives (SHA-256, UTF-8, ISO-8601, SCTE-35, ...) are still possible and
+# should be flagged/dropped manually when merging — this list only covers
+# patterns common enough to filter automatically.
+NON_JIRA_PREFIXES: frozenset[str] = frozenset({"CVE"})
+
 # GitHub compare API returns at most 250 commits per response.
 GITHUB_COMPARE_LIMIT = 250
 
@@ -124,11 +133,21 @@ def get_prs_for_commit(session: requests.Session, owner: str, repo: str, sha: st
 # ---------------------------------------------------------------------------
 
 def extract_jira_ids(text: str) -> list[str]:
-    """Return deduplicated Jira ticket IDs found in *text*."""
+    """Return deduplicated Jira ticket IDs found in *text*.
+
+    Skips matches whose prefix is in NON_JIRA_PREFIXES (e.g. "CVE-2026" is a
+    Common Vulnerabilities and Exposures ID, not a Jira ticket). Other
+    non-Jira false positives (SHA-256, UTF-8, SCTE-35, a GitHub username
+    that happens to match, ...) are not filtered here — they must still be
+    reviewed manually when merging drafts.
+    """
     seen: set[str] = set()
     result: list[str] = []
     for match in JIRA_TICKET_RE.finditer(text):
         ticket = match.group(1)
+        prefix = ticket.split("-", 1)[0]
+        if prefix in NON_JIRA_PREFIXES:
+            continue
         if ticket not in seen:
             seen.add(ticket)
             result.append(ticket)
@@ -136,8 +155,18 @@ def extract_jira_ids(text: str) -> list[str]:
 
 
 def strip_jira_ids(text: str) -> str:
-    """Remove Jira ticket ID references like '[DPE-1234]' from *text*."""
-    cleaned = re.sub(r"\[?" + JIRA_TICKET_RE.pattern + r"\]?\s*[-–—:]?\s*", "", text)
+    """Remove Jira ticket ID references like '[DPE-1234]' from *text*.
+
+    Leaves non-Jira look-alikes (see NON_JIRA_PREFIXES, e.g. CVE IDs) intact
+    since they are meaningful text, not a ticket reference to strip.
+    """
+    def _replace(match: re.Match) -> str:
+        prefix = match.group(1).split("-", 1)[0]
+        if prefix in NON_JIRA_PREFIXES:
+            return match.group(0)
+        return ""
+
+    cleaned = re.sub(r"\[?" + JIRA_TICKET_RE.pattern + r"\]?\s*[-–—:]?\s*", _replace, text)
     return cleaned.strip()
 
 

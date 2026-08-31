@@ -33,19 +33,14 @@ the track branches):
 To-refs: branch HEADs as of Aug 31, 2026.
 
 TODOs for the release owner:
-1. Release designation: the per-track "revision" numbers for this release are
-   TBD (previous: 3.4 -> rev5, 3.5 -> rev6, 4.0 -> rev7). Update the title and
-   Charmhub channel links once the release is cut.
-2. Compatibility: charm/snap revisions listed are the latest *edge* revisions
-   (verified from release-workflow logs and the Snap Store API on Aug 31,
-   2026). Re-verify at release time; promote to stable numbers as appropriate.
-3. Compatibility: exact ghcr image IDs for the Rock and Integration Hub images
-   were not re-resolved after the digest bumps — links point at the packages;
-   pin specific image IDs at release time.
-4. Juju versions (min 3.6.13+ / recommended 3.6.25) are carried over from the
-   rev5/6/7 notes; no change was detected in the repos.
-5. Upgrade-instructions link: the docs only have a Kyuubi upgrade page; a
-   product-wide upgrade page is missing (left as Kyuubi's).
+1. Add the released revision number(s) to the title and update the Charmhub
+   channel links accordingly.
+2. Verify all artifacts and links are up to date before publishing — confirm
+   the charm/snap revisions.
+3. Confirm the minimum/recommended Juju versions (v3.6.13+ / v3.6.25) are
+   still accurate for this release; update them if they changed.
+4. Publish or link a product-wide upgrade guide; until one exists, keep
+   pointing at Kyuubi's upgrade instructions page.
 
 Flagged entries:
 - The S3-region docs fix (PRA-165) appears in the Integration Hub, History
@@ -57,9 +52,10 @@ Flagged entries:
 - The Kyuubi LDAP entry (PRA-340, "feat:" prefix) was moved to Features.
 - The Integration Hub "fix: mount S3 truststore secret..." entry was moved to
   Bug fixes based on the "fix:" prefix.
-- False Jira IDs produced by the builder (CVE-2025, CVE-2026, SHA-256, UTF-8,
-  SCTE-35, SAY-5 — the latter is a GitHub username) were stripped; only
-  PRA-*/DPE-*/KF-* links were kept.
+- False Jira IDs produced by the builder (SHA-256, UTF-8, SCTE-35, SAY-5 — the
+  latter is a GitHub username) were stripped; only PRA-*/DPE-*/KF-* links were
+  kept. CVE-2025/CVE-2026 look-alikes are Common Vulnerabilities and Exposures
+  (CVE) IDs, not Jira tickets.
 - Duplicate commits from repeated Renovate re-runs (rock PR #262 x3, PR #275
   x2, PR #276 x2) were collapsed to single entries.
 - Backports of the same change across the 3.4/3.5/4.0 tracks (CODEOWNERS,
@@ -72,15 +68,15 @@ Flagged entries:
   the track branches.
 -->
 
-# Charmed Apache Spark (upcoming stable release — draft)
+# Charmed Apache Spark
 
 Aug 31st, 2026
 
-We're happy to announce a draft of the next stable release notes for Charmed
-Apache Spark, covering all components of the solution across the 3.4, 3.5 and
-4.0 tracks. This release follows the previous stable releases — revision 5
-(track 3.4), revision 6 (track 3.5) and revision 7 (track 4.0), published on
-July 29th, 2026.
+We're happy to announce a new stable release for Charmed Apache Spark,
+covering all components of the solution across the 3.4, 3.5 and 4.0 tracks.
+This release follows the previous stable releases — revision 5 (track 3.4),
+revision 6 (track 3.5) and revision 7 (track 4.0), published on July 29th,
+2026.
 
 The highlight of this cycle is the new **LDAP authentication support for
 Charmed Apache Kyuubi** ([PRA-340](https://warthogs.atlassian.net/browse/PRA-340)),
@@ -100,7 +96,12 @@ Charmhub: [spark-integration-hub-k8s](https://charmhub.io/spark-integration-hub-
 
 ## List of changes
 
+The changes below are grouped by component and, within each component, by category.
+
 ### spark8t (Python library)
+
+Changes to the `spark8t` Python library (`spark-k8s-toolkit-py`) on `main`
+since v1.4.0:
 
 #### Other improvements
 
@@ -119,6 +120,9 @@ Charmhub: [spark-integration-hub-k8s](https://charmhub.io/spark-integration-hub-
 
 ### Charmed Apache Spark Rock (OCI images)
 
+Changes to the Charmed Apache Spark Rock (`charmed-spark-rock`) OCI images
+across the 3.4, 3.5 and 4.0 tracks:
+
 #### Security
 
 * Update dependency org.postgresql:postgresql to v42.7.13 [SECURITY] (3.5/edge) ([PR #262](https://github.com/canonical/charmed-spark-rock/pull/262)) ([727424a](https://github.com/canonical/charmed-spark-rock/commit/727424a139552bfa56c67b78692cf3b9daa07ab8))
@@ -135,6 +139,9 @@ Charmhub: [spark-integration-hub-k8s](https://charmhub.io/spark-integration-hub-
 
 ### spark-client snap
 
+Changes to the `spark-client` snap (`spark-client-snap`) across the 3.4, 3.5
+and 4.0 tracks:
+
 #### Other improvements
 
 * [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add SECURITY.md ([PR #205](https://github.com/canonical/spark-client-snap/pull/205) 3.4/edge, [PR #204](https://github.com/canonical/spark-client-snap/pull/204) 3.5/edge, [PR #206](https://github.com/canonical/spark-client-snap/pull/206) 4.0/edge)
@@ -146,6 +153,9 @@ Charmhub: [spark-integration-hub-k8s](https://charmhub.io/spark-integration-hub-
 * Remove actions read permissions ([PR #189](https://github.com/canonical/spark-client-snap/pull/189) 4.0/edge) ([236aae2](https://github.com/canonical/spark-client-snap/commit/236aae2a33d0a375f7647267c822bc0ac0301a85))
 
 ### Spark Integration Hub
+
+Changes to the Spark Integration Hub charm
+(`spark-integration-hub-k8s-operator`) on `3/edge`:
 
 #### Bug fixes
 
@@ -165,6 +175,9 @@ Charmhub: [spark-integration-hub-k8s](https://charmhub.io/spark-integration-hub-
 
 ### Spark Integration Hub Rock
 
+Changes to the Spark Integration Hub OCI image (`spark-integration-hub-rock`)
+on `3/edge`:
+
 #### Other improvements
 
 * [[PRA-354](https://warthogs.atlassian.net/browse/PRA-354)] [[PRA-355](https://warthogs.atlassian.net/browse/PRA-355)] Add trivy and renovate ([PR #36](https://github.com/canonical/spark-integration-hub-rock/pull/36)) ([bf30751](https://github.com/canonical/spark-integration-hub-rock/commit/bf307510787294bc8081b2eb16663dbe8d716e3a))
@@ -172,6 +185,9 @@ Charmhub: [spark-integration-hub-k8s](https://charmhub.io/spark-integration-hub-
 * [[PRA-354](https://warthogs.atlassian.net/browse/PRA-354)] Improve renovate config ([PR #38](https://github.com/canonical/spark-integration-hub-rock/pull/38)) ([31517e2](https://github.com/canonical/spark-integration-hub-rock/commit/31517e289f5a8d428e48749933853ee916334e26))
 
 ### Spark History Server
+
+Changes to the Spark History Server charm (`spark-history-server-k8s-operator`)
+on the `3/edge` and `4/edge` tracks:
 
 #### Other improvements
 
@@ -188,6 +204,9 @@ Charmhub: [spark-integration-hub-k8s](https://charmhub.io/spark-integration-hub-
 * General updates of Python and charm dependencies, lock file maintenance and dependency pinning ([PR #191](https://github.com/canonical/spark-history-server-k8s-operator/pull/191), [PR #193](https://github.com/canonical/spark-history-server-k8s-operator/pull/193), [PR #206](https://github.com/canonical/spark-history-server-k8s-operator/pull/206), [PR #208](https://github.com/canonical/spark-history-server-k8s-operator/pull/208), [PR #209](https://github.com/canonical/spark-history-server-k8s-operator/pull/209), [PR #210](https://github.com/canonical/spark-history-server-k8s-operator/pull/210) 3/edge; [PR #207](https://github.com/canonical/spark-history-server-k8s-operator/pull/207), [PR #211](https://github.com/canonical/spark-history-server-k8s-operator/pull/211), [PR #212](https://github.com/canonical/spark-history-server-k8s-operator/pull/212), [PR #213](https://github.com/canonical/spark-history-server-k8s-operator/pull/213) 4/edge)
 
 ### Charmed Apache Kyuubi
+
+Changes to the Charmed Apache Kyuubi charm (`kyuubi-k8s-operator`) across the
+3.4, 3.5 and 4.0 tracks:
 
 #### Features
 
@@ -213,6 +232,9 @@ Charmhub: [spark-integration-hub-k8s](https://charmhub.io/spark-integration-hub-
 * General updates of Python and charm dependencies, lock file maintenance and dependency pinning ([PR #265](https://github.com/canonical/kyuubi-k8s-operator/pull/265), [PR #269](https://github.com/canonical/kyuubi-k8s-operator/pull/269), [PR #292](https://github.com/canonical/kyuubi-k8s-operator/pull/292), [PR #298](https://github.com/canonical/kyuubi-k8s-operator/pull/298), [PR #299](https://github.com/canonical/kyuubi-k8s-operator/pull/299), [PR #306](https://github.com/canonical/kyuubi-k8s-operator/pull/306) 3.5/edge; [PR #258](https://github.com/canonical/kyuubi-k8s-operator/pull/258), [PR #262](https://github.com/canonical/kyuubi-k8s-operator/pull/262), [PR #294](https://github.com/canonical/kyuubi-k8s-operator/pull/294), [PR #295](https://github.com/canonical/kyuubi-k8s-operator/pull/295) 3.4/edge; [PR #273](https://github.com/canonical/kyuubi-k8s-operator/pull/273), [PR #277](https://github.com/canonical/kyuubi-k8s-operator/pull/277), [PR #293](https://github.com/canonical/kyuubi-k8s-operator/pull/293), [PR #302](https://github.com/canonical/kyuubi-k8s-operator/pull/302), [PR #303](https://github.com/canonical/kyuubi-k8s-operator/pull/303), [PR #307](https://github.com/canonical/kyuubi-k8s-operator/pull/307) 4.0/edge)
 
 ### Charmed Apache Spark Terraform Module (spark-k8s-bundle)
+
+Changes to the Terraform module (`spark-k8s-bundle`) across the 3.4, 3.5 and
+4.0 track branches:
 
 #### Other improvements
 
