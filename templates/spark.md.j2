@@ -1,0 +1,181 @@
+{# Charmed Apache Spark release notes template.
+
+   Modelled on the published Charmed Apache Spark release notes in
+   canonical/spark-k8s-bundle (docs/reference/releases/revision-*.md on the
+   track/* branches), e.g.
+   https://canonical.com/data/spark/docs/3.5/reference/releases/revision-6/
+
+   Differences from base.md.j2 (all deliberate, to match the published docs):
+     * MyST frontmatter with an html_meta description and a MyST anchor.
+     * Title is "Charmed Apache Spark (revision N)"; the date is a plain line
+       (e.g. "July 29th, 2026"), not bold.
+     * Links line is "Charmhub: <channel> | Docs | Deploy guide |
+       System requirements".
+     * Section names/order follow the Spark docs, NOT the DA186 default order:
+       Features, Enhancements, Bug Fixes, Breaking Changes,
+       Documentation improvements, Security, Compatibility, Acknowledgements.
+       ("Enhancements" is Spark's name for DA186's "Other improvements";
+       "Documentation improvements" is a Spark-specific extra section.)
+     * Within each section, entries are grouped under per-component `###`
+       subheadings (Apache Kyuubi, Apache Spark History Server, Spark
+       Integration Hub, Apache Spark Client snap, Canonical security
+       maintained OCI Images for Apache Spark, Charmed Apache Spark Terraform
+       Module, spark8t) — the builder cannot infer components, so it emits a
+       flat list per section and the agent regroups it.
+     * Security is a CVE table (reStructuredText grid table in an eval-rst
+       block), not a changelog category.
+     * Compatibility is a reStructuredText grid table in an eval-rst block
+       with the columns: Component | Hardware architecture | Channel |
+       Artifact | Revision | Minimum Juju version | Recommended Juju version.
+
+   Product-wide scope: Charmed Apache Spark release notes cover the whole
+   solution, not just one repository — the charms (kyuubi-k8s,
+   spark-history-server-k8s, spark-integration-hub-k8s), the OCI images
+   (charmed-spark-rock, spark-integration-hub-rock), the spark-client snap,
+   the spark8t library and the Terraform module (spark-k8s-bundle).
+   Never title a Charmed Apache Spark release notes document after a single
+   component such as the Terraform module.
+#}
+{% extends "base.md.j2" %}
+
+{% block frontmatter %}
+---
+myst:
+  html_meta:
+    description: "Release notes for {{ title }} — TODO: one sentence naming the most notable changes."
+---
+
+(reference-releases-revision-TODO)=
+{% endblock %}
+{% block date_line %}
+
+{{ date }}
+{% endblock %}
+{% block introduction %}
+
+We're excited to announce a new stable release for Charmed Apache Spark.
+
+<!-- TODO: 1-2 more paragraphs summarising the most notable changes: new
+features, workload version bumps (Apache Spark / Apache Kyuubi / NVIDIA
+Spark-RAPIDS), breaking changes and security fixes. -->
+
+{% block intro_links %}
+Charmhub: [TODO/stable](https://charmhub.io/kyuubi-k8s?channel=TODO/stable) | [Docs](https://canonical.com/data/spark/docs/TODO/) | [Deploy guide](https://canonical.com/data/spark/docs/TODO/how-to/deploy/) | [System requirements](https://canonical.com/data/spark/docs/TODO/reference/requirements/)
+{% endblock %}
+{% endblock %}
+{#
+   Spark's changelog sections, in the order used by the published docs.
+   Each maps onto one of the builder's categories; "Documentation
+   improvements" has no builder category and is emitted as an empty section
+   for the agent to fill from the docs-only entries it moves out of
+   Enhancements.
+#}
+{% block changelog %}
+{% set spark_sections = [
+     ("Features", "Features", "This release includes the following major feature:"),
+     ("Enhancements", "Other improvements", "This release includes general enhancements across the solution, as well as to the individual components, as follows."),
+     ("Bug Fixes", "Bug fixes", "This release includes several bug fixes across the solution, which are listed below categorized to individual components."),
+     ("Breaking Changes", "Breaking changes", "This release includes the following breaking change:"),
+   ] %}
+{% for heading, source_category, lead_in in spark_sections %}
+{% if categories.get(source_category) %}
+
+## {{ heading }}
+
+{{ lead_in }}
+
+{# TODO: regroup the entries below under per-component "### <Component>"
+   subheadings (Apache Kyuubi, Apache Spark History Server, Spark Integration
+   Hub, Apache Spark Client snap, Canonical security maintained OCI Images for
+   Apache Spark, Charmed Apache Spark Terraform Module, spark8t), and add a
+   "### General" subheading for solution-wide changes such as component
+   version bumps. Move documentation-only entries to the "Documentation
+   improvements" section below. #}
+{% for entry in categories[source_category] %}
+* {% if entry.jira_ids %}{% for jira in entry.jira_ids %}[[{{ jira }}](https://warthogs.atlassian.net/browse/{{ jira }})]{% endfor %} {% endif %}{{ entry.message }}{% if entry.pr_number %} ([#{{ entry.pr_number }}]({{ entry.pr_url }})){% endif %}
+
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+## Documentation improvements
+
+The current release also features the following documentation changes:
+
+<!-- TODO: move the documentation-only entries here from the Enhancements
+section above; delete this section if the release has none. -->
+{% endblock %}
+{% block security %}
+
+## Security
+
+The following CVEs have been fixed in the new artifacts:
+
+<!-- TODO: fill in the CVE table from the Trivy/security scan results of the
+released artifacts. Delete this section if no CVEs were fixed. Keep the
+reStructuredText grid table below in sync: every column must be padded to the
+same width as its `+---+` separator, or Sphinx will fail to parse it. -->
+
+```{eval-rst}
++------------------+----------+-----------------------------------------------------------------------------------------------+
+| Component        | Severity | Fixed                                                                                         |
++==================+==========+===============================================================================================+
+| Apache Spark     | High     | TODO                                                                                          |
++                  +----------+-----------------------------------------------------------------------------------------------+
+|                  | Medium   | TODO                                                                                          |
++------------------+----------+-----------------------------------------------------------------------------------------------+
+| Apache Kyuubi    | High     | TODO                                                                                          |
++                  +----------+-----------------------------------------------------------------------------------------------+
+|                  | Medium   | TODO                                                                                          |
++------------------+----------+-----------------------------------------------------------------------------------------------+
+```
+{% endblock %}
+
+{% block compatibility %}
+The following table summarize the compatibility matrix of the solution:
+
+<!-- TODO: fill in the revisions and versions for this release. Sources of
+truth: the release workflow of each repository, the Snap Store API
+(`curl -s -H "Snap-Device-Series: 16" https://api.snapcraft.io/v2/snaps/info/spark-client`),
+the OCI image packages on ghcr.io, and the previous release's table (bump only
+what changed). Per-architecture revisions: the two consecutive revision
+numbers released together are the AMD64/ARM64 pair — verify before publishing.
+Keep the grid table columns padded to match the `+---+` separators. -->
+
+```{eval-rst}
++-----------------------------+-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+| Component                   | Hardware architecture | Channel             | Artifact | Revision | Minimum Juju version | Recommended Juju version |
++=============================+=======================+=====================+==========+==========+======================+==========================+
+| Apache Spark History Server | AMD64                 | TODO                | TODO     | TODO     | TODO                 | TODO                     |
++                             +-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+|                             | ARM64                 | TODO                | TODO     | TODO     | TODO                 | TODO                     |
++-----------------------------+-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+| Spark Integration Hub       | AMD64                 | TODO                | TODO     | TODO     | TODO                 | TODO                     |
++                             +-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+|                             | ARM64                 | TODO                | TODO     | TODO     | TODO                 | TODO                     |
++-----------------------------+-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+| Apache Kyuubi               | AMD64                 | TODO                | TODO     | TODO     | TODO                 | TODO                     |
++                             +-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+|                             | ARM64                 | TODO                | TODO     | TODO     | TODO                 | TODO                     |
++-----------------------------+-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+| Apache Spark Client Snap    | AMD64                 | TODO                | TODO     | TODO     | N/A                  | N/A                      |
++                             +-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+|                             | ARM64                 | TODO                | TODO     | TODO     | N/A                  | N/A                      |
++-----------------------------+-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+| Charmed Apache Spark        | AMD64                 | TODO                | TODO     | N/A      | N/A                  | N/A                      |
++                             +-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+|                             | ARM64                 | TODO                | TODO     | N/A      | N/A                  | N/A                      |
++-----------------------------+-----------------------+---------------------+----------+----------+----------------------+--------------------------+
+```
+
+```{note}
+Model destruction for controllers above 3.6.18+ may sometimes freeze (see [Juju issue #22105](https://github.com/juju/juju/issues/22105)). In these cases, we recommend destroying the resources manually.
+```
+{% endblock %}
+
+{% block footer %}
+
+## Acknowledgements
+
+<!-- TODO: thank the contributors to this release, or delete this section. -->
+{% endblock %}

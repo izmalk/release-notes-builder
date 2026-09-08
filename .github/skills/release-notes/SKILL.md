@@ -142,7 +142,57 @@ If a repo's default branch is a single-track repo (e.g. `spark-k8s-toolkit-py`
 with only `main`), it needs no track disambiguation at all — resolve it like
 any single-branch repo.
 
-### 2. Generate per-repo drafts
+### 2. Select or create the product template
+
+Before generating any draft, decide which Jinja template to render with.
+**Never** fall back to `templates/base.md.j2` for a product that has published
+release notes of its own — the base template produces a generic DA186 skeleton
+that will not match the product's established structure, links or section
+names.
+
+1. **Look for an existing product template** in `templates/`. Match on the
+   *product*, not the repository: `templates/spark.md.j2` covers every
+   Charmed Apache Spark repo (`spark-k8s-bundle`, `kyuubi-k8s-operator`,
+   `charmed-spark-rock`, `spark-client-snap`, …), just as
+   `templates/kafka.md.j2` covers the Kafka repos. List the directory rather
+   than guessing a filename.
+2. **If no template matches, create one** from the product's existing
+   published release notes — do not proceed with the base template:
+   a. Find the product's most recent published release notes. Best sources,
+      in order: `docs/reference/releases/` in the product's docs repo (fetch
+      the newest `revision-*.md` for the resolved track), the product's docs
+      site (`https://canonical.com/data/<product>/docs/<track>/reference/releases/`),
+      or a previously generated document in `release-notes/`.
+   b. Read it in full and extract the structure that must be reproduced:
+      frontmatter, title format, date format, intro wording, the links line,
+      the **section names and their order** (products often rename or add
+      sections — e.g. Spark uses "Enhancements" instead of "Other
+      improvements" and adds "Documentation improvements", "Security" and
+      "Acknowledgements"), per-component subheadings, entry link format, and
+      the exact shape of the Security and Compatibility tables.
+   c. Write `templates/<product>.md.j2` that `{% extends "base.md.j2" %}` and
+      overrides the blocks it needs: `frontmatter`, `title`, `date_line`,
+      `introduction`, `intro_links`, `changelog`, `security`,
+      `compatibility`, `known_issues`, `footer`. Map the builder's fixed
+      categories (`Features`, `Breaking changes`, `Security`, `Bug fixes`,
+      `Other improvements`) onto the product's section names inside the
+      `changelog` block; leave product-specific sections the builder can't
+      populate (CVE tables, per-component grouping) as clearly marked `TODO`
+      comments for the polish pass.
+   d. Head the template with a comment block explaining what it reproduces,
+      how it differs from `base.md.j2` and why, and where the reference
+      release notes live.
+   e. Verify it renders: run the builder once against it and check the output
+      before generating the real drafts. Also re-render `base.md.j2` and any
+      other product template if you changed the base, to catch regressions.
+3. **Name the document after the product, never after one component.** A
+   Charmed Apache Spark release-notes document is titled "Charmed Apache
+   Spark", even when the only repository in range is `spark-k8s-bundle` (the
+   Terraform module). If the resolved scope covers a single component of a
+   larger product, say so in the review notes and intro — do not retitle the
+   document after that component.
+
+### 3. Generate per-repo drafts
 
 Run the automation script once per repository, writing each draft to a
 temporary file (do not leave intermediate files in the repo root):
@@ -160,9 +210,9 @@ python build_release_notes.py \
 ```
 
 Notes:
-- Use `templates/base.md.j2` unless a product-specific template exists in
-  `templates/` that matches the repo (e.g. `templates/kafka.md.j2` for
-  `canonical/kafka-operator`).
+- Use the template resolved in step 2 (an existing `templates/<product>.md.j2`,
+  or the one you just created). `templates/base.md.j2` is only appropriate for
+  a product with no published release notes to model on.
 - `--use-prs` gives cleaner entries (PR titles) — prefer it.
 - If the script warns that the commit range was **truncated** (>250 commits),
   re-run with `--from-ref <last-sha>` for the remainder and merge the two
@@ -170,7 +220,7 @@ Notes:
 - If a repo has no changes in the range, skip it and note that in the review
   notes.
 
-### 3. Merge the drafts and polish the changelog
+### 4. Merge the drafts and polish the changelog
 
 Read every per-repo draft directly (they are short — typically well under
 200 lines each) and merge + polish them **in a single pass**. Do not use a
@@ -193,7 +243,7 @@ For multiple repositories, build the merged "List of changes" like this:
   Security, Bug fixes, Other improvements. Omit empty categories.
 - Carry every entry over verbatim (message text, Jira links, PR link,
   commit link) — merging is a reorganisation, not a rewrite.
-- After all components, a single `## Compatibility` heading (see step 5).
+- After all components, a single `## Compatibility` heading (see step 6).
 - **No adjacent headings with nothing between them.** Every heading (`#`,
   `##`, `###`, ...) must be followed by at least a short sentence of body
   text before the next heading — even a one-line lead-in — never let one
@@ -235,7 +285,7 @@ altering the facts**:
 - **Facts**: never rewrite a message to say something different, never
   invent Jira IDs, PR numbers, versions, or dates.
 
-### 4. Write the introduction
+### 5. Write the introduction
 
 Based on the contents of the merged draft, write the intro (replacing the
 `INTRO-TODO` / TODO comment):
@@ -249,7 +299,7 @@ Based on the contents of the merged draft, write the intro (replacing the
   docs (e.g. `https://canonical.com/data/docs/<product>/iaas/...`); if the
   product is unknown, leave `TODO` links and flag them for the user.
 
-### 5. Populate the Compatibility section
+### 6. Populate the Compatibility section
 
 Build a single `## Compatibility` heading at the end of the document, and
 ensure it is correct and up to date:
@@ -277,7 +327,7 @@ ensure it is correct and up to date:
 - If a value cannot be determined from the repo, leave a clearly marked
   `TODO` and flag it in the review notes — do not guess.
 
-### 6. Ask the user (only when needed)
+### 7. Ask the user (only when needed)
 
 Query the user for a preferred resolution when:
 
@@ -325,7 +375,7 @@ take. If, upon review, a TODO's action isn't relevant to this release (e.g.
 it doesn't apply to this document's scope), delete that TODO entry outright
 rather than leaving it as an aside — don't accumulate stale TODOs.
 
-### 7. Save the final document
+### 8. Save the final document
 
 1. Write the final document to `release-notes/<product>-<to-ref>.md`
    (create the `release-notes/` directory if needed).
@@ -346,8 +396,14 @@ Verify the final document against the spec before saving:
       requirements links.
 - [ ] List of changes: full list since previous stable release, distributed
       among categories (Features, Breaking changes, Security, Bug fixes,
-      Other improvements); each entry links a PR and/or commit; empty
-      categories omitted.
+      Other improvements — or the product template's equivalents); each entry
+      links a PR and/or commit; empty categories omitted.
+- [ ] The document was rendered from the product's own template (an existing
+      `templates/<product>.md.j2`, or one created in step 2 from the
+      product's published release notes) — not from the generic
+      `templates/base.md.j2`.
+- [ ] The document is titled after the **product**, not after a single
+      component of it (see step 2).
 - [ ] Compatibility: workload versions, software dependencies (Juju
       versions), hardware architectures (with per-architecture revisions
       if applicable).
@@ -358,7 +414,7 @@ Verify the final document against the spec before saving:
       visible text; open items live only in the top HTML comment, phrased
       as imperative TODOs (see "Fully publishable output").
 - [ ] No heading is immediately followed by another heading with zero body
-      text in between (see step 3).
+      text in between (see step 4).
 - [ ] Unless the user explicitly asked for a multi-track/product-wide
       document, the release notes cover a single track (see "Track /
       channel scope").
@@ -368,4 +424,6 @@ Verify the final document against the spec before saving:
 - Spec: `examples/DA186 - Release notes for Data charms.md`
 - Example output: `examples/Example-release-notes-spec.md`
 - Builder script: `build_release_notes.py` (see `README.md` for CLI reference)
-- Templates: `templates/base.md.j2`, product templates alongside it
+- Templates: `templates/base.md.j2` (generic DA186 skeleton),
+  `templates/kafka.md.j2`, `templates/spark.md.j2` — product templates live
+  alongside the base and extend it (see step 2)

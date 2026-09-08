@@ -120,14 +120,20 @@ Defines the full DA186-compliant structure with overridable Jinja2 blocks:
 
 | Block | Purpose |
 | :--- | :--- |
+| `frontmatter` | Anything above the title (e.g. MyST `html_meta`, anchors) |
 | `title` | Release heading |
 | `date_line` | Date line below the title |
 | `introduction` | Intro paragraph (edit manually after generation) |
 | `intro_links` | Charmhub / Deploy / Upgrade / System requirements links |
+| `changelog` | The whole "list of changes" section |
+| `security` | Product-specific security / CVE section (empty by default) |
 | `compatibility` | Compatibility table |
 | `known_issues` | Known issues section (commented out by default) |
+| `footer` | Anything after the known issues section |
 
-The changelog section is generated automatically from the `categories` context variable.
+The changelog section is generated automatically from the `categories` context
+variable. Override the `changelog` block when a product renames or reorders its
+sections (see `templates/spark.md.j2`).
 
 ### Product-specific templates
 
@@ -147,7 +153,24 @@ Create a new file that extends the base:
 {% endblock %}
 ```
 
-See `templates/kafka.md.j2` for a working example.
+Working examples:
+
+* `templates/kafka.md.j2` — minimal extension: product links plus a
+  compatibility table, keeping the base DA186 section names and order.
+* `templates/spark.md.j2` — full restructure modelled on the published
+  Charmed Apache Spark release notes: MyST frontmatter, product-specific
+  section names and order (`Enhancements` instead of `Other improvements`,
+  plus `Documentation improvements`, `Security` and `Acknowledgements`), and
+  reStructuredText grid tables for the CVE and compatibility matrices.
+
+### If no product template exists
+
+Don't render a product that already has published release notes through
+`base.md.j2` — the generic skeleton won't match its established structure.
+Create `templates/<product>.md.j2` from the product's newest published release
+notes instead (usually `docs/reference/releases/revision-*.md` in the product's
+docs repo), extending the base and overriding the blocks above. The agent skill
+does this automatically as step 2 of its procedure.
 
 ## Agentic skill: automatic release notes
 
@@ -158,21 +181,24 @@ or multiple repositories and it will:
 1. Resolve the commit range per repo (default branch; from the most recent
    release/tag or the last documented release notes in the docs, to the
    branch HEAD — or user-specified refs).
-2. Run `build_release_notes.py` per repository to gather and categorise
+2. Pick the product's Jinja template from `templates/` — or, if the product
+   has none, build one from its published release notes before generating
+   anything.
+3. Run `build_release_notes.py` per repository to gather and categorise
    changes.
-3. Merge the per-repo drafts into a single product document directly (the
+4. Merge the per-repo drafts into a single product document directly (the
    agent reads each draft and reorganises it under per-component headings) —
    each component gets its own set of categories; empty components/categories
    are omitted. There is no separate merge script: the agent has to read
    every draft in full to polish it anyway, so a mechanical pre-merge step
    would just duplicate that work and risks its own formatting bugs.
-4. Polish the draft (duplicates, miscategorised entries, false Jira-ID
+5. Polish the draft (duplicates, miscategorised entries, false Jira-ID
    matches, formatting) without altering the facts, querying the user on
    ambiguous cases.
-5. Write the introduction (1–3 paragraphs) and populate the Compatibility
+6. Write the introduction (1–3 paragraphs) and populate the Compatibility
    section from repo sources of truth (`charmcraft.yaml`, `metadata.yaml`,
    snap/rock metadata, release tags).
-6. Save the result to `release-notes/<product>-<to-ref>.md` for review.
+7. Save the result to `release-notes/<product>-<to-ref>.md` for review.
 
 Nothing is ever pushed or posted — all output stays in this local repository.
 
@@ -205,7 +231,8 @@ release-notes-builder/
 ├── requirements.txt                # Python dependencies
 ├── templates/
 │   ├── base.md.j2                  # Base DA186-compliant template
-│   └── kafka.md.j2                 # Kafka product extension
+│   ├── kafka.md.j2                 # Charmed Apache Kafka extension
+│   └── spark.md.j2                 # Charmed Apache Spark extension
 ├── examples/
 │   ├── DA186 - Release notes for Data charms.md   # Spec reference
 │   ├── Example-release-notes-spec.md              # PostgreSQL example
