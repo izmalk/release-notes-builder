@@ -1,6 +1,6 @@
 ---
 name: release-notes
-description: 'Generate DA186-compliant release notes for Canonical Data & AI charms. Use when the user asks to "generate release notes", "compile a changelog", "prepare release notes draft" for one or multiple charm repositories (e.g. canonical/kafka-operator), optionally for a branch, track, or a commit range. Gathers changes via GitHub API, merges multi-repo notes into a single product draft, writes intro and compatibility sections, and saves the result locally for review. Never publishes anything.'
+description: 'Generate DA186-compliant release notes for Canonical Data & AI charms. Use when the user asks to "generate release notes", "create release notes", "compile a changelog", "prepare release notes draft", or a similar phrasing/verb, for one or multiple charm repositories (e.g. canonical/kafka-operator) or a link to a previously published release-notes page, optionally for a branch, track, or a commit range. Gathers changes via GitHub API, discovers sibling components from prior release notes, merges multi-repo notes into a single product draft, writes intro and compatibility sections, and saves the result locally for review. Never publishes anything.'
 argument-hint: '[repo ...] [--track TRACK] [--branch BRANCH] [--from-ref REF] [--to-ref REF]'
 ---
 
@@ -19,6 +19,51 @@ repository.
 - "Prepare release notes for Kafka 4.2 from rev247 to rev248"
 - "Compile release notes for https://github.com/canonical/kafka-operator and https://github.com/canonical/kafka-connect-operator as one product"
 - "Draft release notes for the 14/stable channel of postgresql-operator"
+- "Create release notes for https://canonical.com/data/opensearch/docs/2/reference/release-notes/revision-315/"
+  (a link to a *previous* published release; see "Starting from a link to
+  previously published release notes" below — generate the *next* release
+  after the one that link documents, not that release itself)
+- "Write the next OpenSearch release notes" (any generation verb — create,
+  write, build, draft, compile, prepare — is treated the same; see "Any
+  generation verb triggers this skill" below)
+
+## Any generation verb triggers this skill
+
+Treat "generate", "create", "compile", "draft", "prepare", "write", "build",
+and similar verbs applied to "release notes" / "changelog" as equivalent
+requests — they all mean run this skill's full procedure. The verb used has
+no bearing on scope or thoroughness: don't skip template selection, sibling-
+component discovery, compatibility, or the DA186 checklist just because the
+user said "create" instead of "generate".
+
+## Starting from a link to previously published release notes
+
+Sometimes the user points at an already-published release-notes page instead
+of naming repos/refs directly, e.g. "Create release notes for
+https://canonical.com/data/opensearch/docs/2/reference/release-notes/revision-315/".
+Treat that page as documenting the **previous** release, not the release to
+generate:
+
+1. Fetch the page (`fetch_webpage` for a docs-site URL like this — don't try
+   to guess an underlying GitHub file path first). It gives you, for free,
+   most of what step 1 (Resolve references) would otherwise have to discover:
+   - **Product name** and **track** from the URL path and the page's own
+     title/links.
+   - **from-ref** for the primary component: the revision/tag documented on
+     that page (e.g. `revision-315` → charm revision 315). Generate notes for
+     the *next* release after it — from that revision forward to `HEAD` (or a
+     `to-ref` the user gives) — never regenerate the revision the link itself
+     documents.
+   - **The full list of components** the product ships — read every
+     component subheading and Compatibility subsection on the page, don't
+     stop at the one component the user named in their message (see "Always
+     check for sibling components" in step 1 below).
+   - **The document structure to reproduce** — use this page directly as the
+     "most recent published release notes" source for step 2 (template
+     selection); if `templates/<product>.md.j2` doesn't exist yet, build it
+     from this page instead of searching elsewhere.
+2. Note in the review-notes comment that this link was the source used to
+   resolve `from-ref`, the track, and the component list.
 
 ## Track / channel scope (single track by default)
 
@@ -91,7 +136,8 @@ involved. Follow these rules:
 
 | Input | Default | Notes |
 |-------|---------|-------|
-| Repositories | — (required) | `owner/repo` or full GitHub URL; one or more |
+| Repositories | — (required, unless given as a previous release notes link) | `owner/repo` or full GitHub URL; one or more |
+| Previous release notes link | — (optional alternate to naming repos) | A URL to an already-published release-notes page (e.g. a `revision-NNN` docs page); resolves product, track, from-ref, and component list — see "Starting from a link to previously published release notes" |
 | Track | The documentation's default track (see above) | Ask if it can't be determined |
 | Branch | The track's branch (repo default branch if single-track product) | Resolve via GitHub API |
 | From-ref | See "Resolving from-ref" below | Tag/SHA/branch |
@@ -136,6 +182,39 @@ repo-by-repo:
       for the resolved track (not other tracks), and use the revision/tag it
       documents.
    d. If neither can be determined, ask the user which ref to start from.
+4. **Check for sibling components not named by the user.** Even when the
+   user names (or links to) only one main charm/repo, a product's release
+   notes often cover additional components that ship alongside it — a
+   companion charm (e.g. a dashboards/UI charm), a snap, a rock, a Terraform
+   module, COS/Grafana dashboards, etc. Before finalizing scope:
+   a. Look at the product's most recently published release notes (the same
+      page used to resolve `from-ref` in step 1.3, or the link from
+      "Starting from a link to previously published release notes") and list
+      every component subheading / Compatibility subsection it contains.
+   b. **Ask the user before adding any detected sibling component that they
+      didn't name.** Never add it to scope silently, even by default. List
+      the detected component(s) (name + where you found them, e.g. "found
+      `opensearch-dashboards` as a component in revision-315's release
+      notes") and ask, in one batched question, whether to include each of
+      them in this release-notes document. Proceed only with the ones the
+      user confirms; skip a component the user declines, and note the
+      decision in the review notes either way. Skip this ask entirely only
+      if the user's original request already explicitly restricted scope to
+      a single named component (e.g. "just the charm, nothing else").
+   c. For every sibling component the user confirms, resolve its
+      branch/from-ref/to-ref the same way as the named repo(s), check it for
+      changes in range, and include it in the merged draft (or carry over
+      its unchanged Compatibility entry, per step 6).
+   d. If a confirmed sibling component can't be automatically mapped to a
+      GitHub repo (e.g. it's a UI-only or docs-only entry with no obvious
+      repo, or a name that doesn't match any `canonical/*` repo), **ask the
+      user for that repository's address** (batch this with the step 1.4.b
+      confirmation question when possible) rather than guessing or silently
+      dropping it. Only fall back to a `TODO` in the review notes if the
+      user doesn't know the repo either.
+   e. Record in the review notes which components were added this way (and
+      that the user confirmed them, and supplied the repo address if it
+      wasn't auto-mapped) or explicitly declined.
 
 Record which source was used for each repo — it goes into the review notes.
 If a repo's default branch is a single-track repo (e.g. `spark-k8s-toolkit-py`
@@ -338,6 +417,12 @@ Query the user for a preferred resolution when:
 - A suspicious entry appears (e.g. a revert without its original, a merge
   commit listed as a change, an entry whose message contradicts its PR).
 - Compatibility values are missing and cannot be derived from the repo.
+- One or more sibling components were detected in the product's previous
+  release notes but weren't named by the user (step 1.4.b) — always ask,
+  never include them by default.
+- A confirmed sibling component's GitHub repo can't be determined
+  automatically (step 1.4.d) — ask the user for the repository address
+  instead of guessing.
 
 Batch unrelated small questions into one ask; never ask about anything you
 can resolve yourself from the repos.
@@ -418,6 +503,13 @@ Verify the final document against the spec before saving:
 - [ ] Unless the user explicitly asked for a multi-track/product-wide
       document, the release notes cover a single track (see "Track /
       channel scope").
+- [ ] Checked the product's previous release notes for sibling/additional
+      components beyond the one(s) the user named or linked to, and asked
+      the user to confirm before including any of them (see step 1.4) —
+      never added a detected sibling component silently.
+- [ ] If the input was a link to a previously published release-notes page,
+      the generated document covers the *next* release after that page, not
+      the release the page itself documents.
 
 ## Reference
 
