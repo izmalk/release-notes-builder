@@ -11,10 +11,225 @@ The repository contains two things:
   whole release-notes workflow for a *product* (which usually spans several
   repositories), calling the script as one of its steps.
 
+## Choose how you'll run it
+
+There are two ways to work, and they differ in installation, in what you type,
+and in where the document ends up. Pick one before reading further:
+
+| | [**A — From the target repo**](#a--from-the-target-repo-recommended) | [**B — From this repo**](#b--from-this-repo-standalone) |
+| :--- | :--- | :--- |
+| **Your workspace** | The product repo, e.g. `kafka-operator` | `release-notes-builder` |
+| **Who it's for** | Anyone writing release notes for a product | Developing the skill or the builder; one-off experiments |
+| **Setup** | Copy one file (`SKILL.md`) | `git clone` this repo |
+| **This repo** | Not cloned, not open | Cloned and open |
+| **Output goes to** | Inside the product repo, next to its existing release notes | `release-notes/` here |
+| **Docs & sources on hand** | Yes — the agent can read `charmcraft.yaml`, previous notes, etc. | No — everything comes from the GitHub API |
+
+**Option A is the recommended one.** The skill needs to read the target repo's
+metadata and previous release notes to write the compatibility table and to
+match the product's established structure, and it can only do that when that
+repo is the open workspace.
+
+Either way you can also bypass the agent entirely and
+[run the builder script by hand](#running-the-builder-script-by-hand).
+
+## A — From the target repo (recommended)
+
+### Installation: copy one file
+
+You don't need this repository at all — not cloned, not open. `SKILL.md` is
+**self-bootstrapping**: on first use it downloads the builder script and
+templates from this public repo into `~/.cache/release-notes-builder/`. So
+installing means copying a single file.
+
+```bash
+# Available in every workspace, no clone required:
+mkdir -p ~/.claude/skills/release-notes && curl -fsSL -o ~/.claude/skills/release-notes/SKILL.md \
+  https://raw.githubusercontent.com/izmalk/release-notes-builder/main/.github/skills/release-notes/SKILL.md
+```
+
+Use `~/.copilot/skills/…` or `~/.agents/skills/…` instead if that's what your
+harness reads. To scope it to one repo rather than your whole machine, write it
+to `.github/skills/release-notes/SKILL.md` inside the target repo and commit it
+so teammates get it too.
+
+If your harness doesn't discover skills — or you just want one run — skip
+installation and name the file in your message:
+
+> Using the skill instructions at
+> `https://raw.githubusercontent.com/izmalk/release-notes-builder/main/.github/skills/release-notes/SKILL.md`,
+> generate release notes for canonical/kafka-operator
+
+Full details, including how `$BUILDER_HOME` is resolved, are in
+[`SKILL.md`](.github/skills/release-notes/SKILL.md#installing-and-running-this-skill).
+
+### Usage from the target repo
+
+Open the **product's own repository** as your workspace and ask the agent for
+release notes, for example:
+
+> Generate release notes for canonical/kafka-operator and
+> canonical/kafka-k8s-operator from rev247 to rev248
+
+or — most conveniently — by linking the **previously published** release-notes
+page, from which the skill derives the product, the track, the starting ref and
+the component list, and generates the *next* release after it:
+
+> Create release notes for
+> https://canonical.com/data/opensearch/docs/2/reference/release-notes/revision-315/
+
+Add `auto-sort on` (or `off`) to skip the question about reclassifying the
+"Other improvements" catch-all:
+
+> Create release notes for canonical/opensearch-operator with auto-sort on
+
+The skill then resolves the refs, confirms the sibling components with you, runs
+the builder once per repository, merges the drafts, and writes the introduction
+and compatibility table. The full path is described in
+[End-to-end workflow](#end-to-end-workflow).
+
+### Output location in the target repo
+
+Saved **inside the target repo**, in the folder its previous release notes
+already live in (e.g. `docs/reference/release-notes/revision-316.md`), following
+that folder's naming convention. If no such folder is found, the agent asks — it
+never guesses. Nothing is ever pushed or published.
+
+### Keeping it current
+
+The skill file and the cache are independent snapshots:
+
+- **Update `SKILL.md`** by re-running the `curl` above; it overwrites in place.
+- **Refresh the cached script and templates** by asking the agent for the latest
+  version, or by deleting `~/.cache/release-notes-builder/` so the next run
+  re-bootstraps.
+
+## B — From this repo (standalone)
+
+Use this mode when you're **developing** the skill, the builder script or the
+templates, or when you just want a quick changelog without touching a product
+repo.
+
+### Installation: clone and install
+
+```bash
+git clone https://github.com/izmalk/release-notes-builder.git
+cd release-notes-builder
+pip install -r requirements.txt
+export GITHUB_TOKEN=$(gh auth token)
+```
+
+Requires Python 3.10+. Opening this repo as your workspace needs **zero further
+setup** — the skill lives at `.github/skills/release-notes/SKILL.md` and
+`--repo` still accepts any `owner/repo`.
+
+To also have your in-progress skill edits apply in *other* workspaces, symlink
+the skill folder instead of re-copying it:
+
+```bash
+ln -s /absolute/path/to/release-notes-builder/.github/skills/release-notes \
+    ~/.claude/skills/release-notes
+```
+
+A local checkout always wins over the bootstrap cache, so your uncommitted
+changes are what actually runs. The skill never overwrites a checkout when
+refreshing.
+
+### Usage from this repo
+
+Ask the agent exactly as in
+[option A](#usage-from-the-target-repo) — the requests are identical, and
+`--repo` is not limited to this repository:
+
+> Generate release notes for canonical/kafka-operator from rev247 to rev248
+
+Because the target repo isn't open, the agent can't read its `charmcraft.yaml`,
+sibling metadata or previously published notes, so the compatibility table and
+the product template may need more manual work than in option A.
+
+### Output location in this repo
+
+`release-notes/<product>-<to-ref>.md` in this repository.
+
+## Running the builder script by hand
+
+`build_release_notes.py` handles a single repository and a single commit range.
+Merging multiple repositories, the introduction, and the compatibility table
+are *not* the script's job — the agent skill does those.
+
+### Prerequisites
+
+- Python 3.10+
+- A GitHub personal access token (recommended for rate limits; required for
+  private repos): `export GITHUB_TOKEN=$(gh auth token)`
+
+```bash
+pip install -r requirements.txt
+```
+
+### Command line
+
+```bash
+python build_release_notes.py \
+    --repo canonical/kafka-operator \
+    --from-ref rev247 \
+    --to-ref rev248 \
+    --template templates/kafka.md.j2
+```
+
+| Argument | Required | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--repo` | Yes | — | Repository in `owner/repo` format or full GitHub URL. |
+| `--from-ref` | Yes | — | Start reference (tag, branch, or SHA). Changes **after** this ref are included. |
+| `--to-ref` | No | Branch HEAD | End reference (tag, branch, or SHA). |
+| `--branch` | No | Repo default | Branch to resolve `--to-ref` against when omitted. |
+| `--template` | Yes | — | Path to the Jinja2 template file. |
+| `--title` | No | `--to-ref` value | Release title shown in the heading (e.g. `"Revision 248"`). |
+| `--token` | No | `GITHUB_TOKEN` env var | GitHub personal access token (overrides the env var). |
+| `--output` | No | stdout | Write output to this file instead of stdout. |
+| `--use-prs` | No | Off | Use PR titles instead of commit messages for changelog entries. |
+
+Token resolution order: `--token` → `GITHUB_TOKEN` → unauthenticated (public
+repos only, 60 requests/hour).
+
+**Example — write to file, use PR titles, custom title:**
+
+```bash
+python build_release_notes.py \
+    --repo canonical/kafka-operator \
+    --from-ref rev247 \
+    --to-ref rev248 \
+    --template templates/kafka.md.j2 \
+    --title "Revision 248" \
+    --use-prs \
+    --output revision-248.md
+```
+
+**Example — from a tag to the latest commit on the default branch:**
+
+```bash
+python build_release_notes.py \
+    --repo canonical/postgresql-operator \
+    --from-ref rev550 \
+    --template templates/base.md.j2
+```
+
+### Manual post-generation steps
+
+If you run the script by hand rather than through the skill, the output is a
+**draft**; you will need to:
+
+1. Write the **Introduction** section (summary of key highlights).
+2. Fill in the **Compatibility** table with exact revisions, versions, and
+   artefact links.
+3. Optionally add a **Known issues** section.
+4. Review and polish individual changelog entries.
+
 ## End-to-end workflow
 
-This is the intended path from "we want to release" to "a document ready for
-review". Steps 3–10 are performed by the agent skill; you only do 1 and 2.
+This is what the skill does in [option A](#a--from-the-target-repo-recommended),
+from "we want to release" to "a document ready for review". Steps 3–10 are
+performed by the agent skill; you only do 1 and 2.
 
 1. **You decide to release** a new charm revision (or a new product release).
 2. **You open the product's own repository** (e.g. `kafka-operator`) as your
@@ -65,87 +280,9 @@ The output is a **finished, publishable document** — open items live only in
 that top comment, as imperative TODOs. **Nothing is ever pushed or published**;
 all output stays local.
 
-Invoke it from the agent chat with, for example:
+## How the builder script works
 
-> Generate release notes for canonical/kafka-operator and
-> canonical/kafka-k8s-operator from rev247 to rev248
-
-or:
-
-> Create release notes for
-> https://canonical.com/data/opensearch/docs/2/reference/release-notes/revision-315/
-
-Add `auto-sort on` (or `off`) to skip the question about reclassifying the
-"Other improvements" catch-all:
-
-> Create release notes for canonical/opensearch-operator with auto-sort on
-
-## Installation: copy one file
-
-You normally don't need this repository at all — not cloned, not open. The skill
-is meant to run with the **target product repo** open as your workspace, and
-`SKILL.md` is **self-bootstrapping**: on first use it downloads the builder
-script and templates from this public repo into
-`~/.cache/release-notes-builder/`. So installing means copying a single file.
-
-```bash
-# Available in every workspace, no clone required:
-mkdir -p ~/.claude/skills/release-notes && curl -fsSL -o ~/.claude/skills/release-notes/SKILL.md \
-  https://raw.githubusercontent.com/izmalk/release-notes-builder/main/.github/skills/release-notes/SKILL.md
-```
-
-Use `~/.copilot/skills/…` or `~/.agents/skills/…` instead if that's what your
-harness reads. To scope it to one repo rather than your whole machine, write it
-to `.github/skills/release-notes/SKILL.md` inside the target repo and commit it
-so teammates get it too.
-
-If your harness doesn't discover skills — or you just want one run — skip
-installation and name the file in your message:
-
-> Using the skill instructions at
-> `https://raw.githubusercontent.com/izmalk/release-notes-builder/main/.github/skills/release-notes/SKILL.md`,
-> generate release notes for canonical/kafka-operator
-
-Full details, including how `$BUILDER_HOME` is resolved, are in
-[`SKILL.md`](.github/skills/release-notes/SKILL.md#installing-and-running-this-skill).
-
-### Keeping it current
-
-The skill file and the cache are independent snapshots:
-
-- **Update `SKILL.md`** by re-running the `curl` above; it overwrites in place.
-- **Refresh the cached script and templates** by asking the agent for the latest
-  version, or by deleting `~/.cache/release-notes-builder/` so the next run
-  re-bootstraps.
-
-### Working on this repo instead
-
-If you're **developing** the skill rather than using it, clone this repo and
-either open it directly (**standalone mode** — zero setup, `--repo` still
-accepts any `owner/repo`), or symlink the skill folder so your edits take effect
-without re-copying:
-
-```bash
-ln -s /absolute/path/to/release-notes-builder/.github/skills/release-notes \
-    ~/.claude/skills/release-notes
-```
-
-A local checkout always wins over the bootstrap cache, so your uncommitted
-changes are what actually runs. The skill never overwrites a checkout when
-refreshing.
-
-### Where the output goes
-
-- **Cross-repo** (target repo open): saved **inside the target repo**, in the
-  folder its previous release notes already live in (e.g.
-  `docs/reference/release-notes/revision-316.md`), following that folder's
-  naming convention. If no such folder is found, the agent asks — it never
-  guesses.
-- **Standalone** (this repo is open): `release-notes/<product>-<to-ref>.md`.
-
-## The builder script
-
-`build_release_notes.py` handles a single repository and a single commit range:
+Internally, `build_release_notes.py`:
 
 1. Fetches commits between two Git references via the **GitHub Compare API**.
 2. Looks up the **merged PR** associated with each commit.
@@ -153,66 +290,6 @@ refreshing.
 4. Extracts and links **Jira ticket IDs** (e.g. `DPE-1234`) from commit messages
    and PR descriptions, skipping known false positives (`CVE-*`).
 5. Renders a **Markdown** document from a Jinja2 template.
-
-Merging multiple repositories, the introduction, and the compatibility table are
-*not* the script's job — the agent skill does those.
-
-### Prerequisites
-
-- Python 3.10+
-- A GitHub personal access token (recommended for rate limits; required for
-  private repos): `export GITHUB_TOKEN=$(gh auth token)`
-
-```bash
-pip install -r requirements.txt
-```
-
-### Usage
-
-```bash
-python build_release_notes.py \
-    --repo canonical/kafka-operator \
-    --from-ref rev247 \
-    --to-ref rev248 \
-    --template templates/kafka.md.j2
-```
-
-| Argument | Required | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--repo` | Yes | — | Repository in `owner/repo` format or full GitHub URL. |
-| `--from-ref` | Yes | — | Start reference (tag, branch, or SHA). Changes **after** this ref are included. |
-| `--to-ref` | No | Branch HEAD | End reference (tag, branch, or SHA). |
-| `--branch` | No | Repo default | Branch to resolve `--to-ref` against when omitted. |
-| `--template` | Yes | — | Path to the Jinja2 template file. |
-| `--title` | No | `--to-ref` value | Release title shown in the heading (e.g. `"Revision 248"`). |
-| `--token` | No | `GITHUB_TOKEN` env var | GitHub personal access token (overrides the env var). |
-| `--output` | No | stdout | Write output to this file instead of stdout. |
-| `--use-prs` | No | Off | Use PR titles instead of commit messages for changelog entries. |
-
-Token resolution order: `--token` → `GITHUB_TOKEN` → unauthenticated (public
-repos only, 60 requests/hour).
-
-**Example — write to file, use PR titles, custom title:**
-
-```bash
-python build_release_notes.py \
-    --repo canonical/kafka-operator \
-    --from-ref rev247 \
-    --to-ref rev248 \
-    --template templates/kafka.md.j2 \
-    --title "Revision 248" \
-    --use-prs \
-    --output revision-248.md
-```
-
-**Example — from a tag to the latest commit on the default branch:**
-
-```bash
-python build_release_notes.py \
-    --repo canonical/postgresql-operator \
-    --from-ref rev550 \
-    --template templates/base.md.j2
-```
 
 ### Truncation warning
 
@@ -450,17 +527,6 @@ Create `templates/<product>.md.j2` from the product's newest published release
 notes instead (usually `docs/reference/releases/revision-*.md` in the product's
 repo, or the rendered docs site), extending the base and overriding the blocks
 above. The agent skill does this automatically as step 6 of the workflow.
-
-## Manual post-generation steps
-
-If you run the script by hand rather than through the skill, the output is a
-**draft**; you will need to:
-
-1. Write the **Introduction** section (summary of key highlights).
-2. Fill in the **Compatibility** table with exact revisions, versions, and
-   artefact links.
-3. Optionally add a **Known issues** section.
-4. Review and polish individual changelog entries.
 
 ## Project structure
 
