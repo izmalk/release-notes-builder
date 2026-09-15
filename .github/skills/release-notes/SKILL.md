@@ -27,6 +27,177 @@ repository.
   write, build, draft, compile, prepare — is treated the same; see "Any
   generation verb triggers this skill" below)
 
+## Running this skill from another repository (the common case)
+
+The automation script (`build_release_notes.py`) and templates (`templates/`)
+live in the **release-notes-builder** repository, but the normal way to use
+this skill is with a **different** repository open as the workspace — the
+charm/product repo you're actually generating release notes for (e.g.
+`kafka-operator`, `opensearch-operator`). `release-notes-builder` itself does
+not need to be open at all.
+
+There are several ways to make the skill's instructions reach that workspace
+(Options A–C below). Pick whichever fits — they all behave identically once
+the skill is loaded, because `$BUILDER_HOME` resolution (below) works the
+same way in every case.
+
+Note that opening `release-notes-builder` itself and using the skill
+normally (i.e. *not* doing any of this) remains fully supported and requires
+no setup at all — it's not one of "the ways to reach another repo" because
+it isn't reaching another repo; `--repo` can still point at any
+`owner/repo`. This is referred to as **standalone mode** elsewhere in this
+skill (see step 8's save-location rule and "Where the output goes"), as
+opposed to **cross-repo mode** (Options A–C, target repo open instead).
+
+### Option A: personal skill via symlink (recommended for repeat use)
+
+Best when you'll generate release notes regularly across many product repos
+and don't want to repeat any setup per repo.
+
+1. Clone or keep a local checkout of `release-notes-builder` anywhere on
+   disk — its path doesn't matter.
+2. Make the skill available in every workspace by installing it as a
+   **personal skill**: symlink (don't copy) its folder into whichever
+   personal skills location your agent harness reads, e.g.:
+   ```bash
+   ln -s /absolute/path/to/release-notes-builder/.github/skills/release-notes \
+       ~/.claude/skills/release-notes
+   ```
+   (also valid: `~/.copilot/skills/release-notes`, `~/.agents/skills/release-notes`
+   — pick whichever your setup reads; one symlink is enough, it does not need
+   to be repeated per target repo). **Symlink, don't copy** — a copy has no
+   way to resolve back to the release-notes-builder checkout that contains
+   the actual script and templates.
+3. Open the target repository (the one to generate release notes *for*) as
+   the workspace. Nothing needs to be added or copied into it.
+
+### Option B: copy the skill into the target repo
+
+Best when you'd rather not touch your personal skills folder, your agent
+harness doesn't support personal skills, or you want the skill checked into
+the target repo itself (e.g. so teammates get it automatically). No
+symlinks or personal-skill install required. Two variants, depending on
+whether the target repo should stay dependent on a release-notes-builder
+chekout elsewhere on disk or not:
+
+**B1. Lightweight copy (recommended default)** — copy only this skill's
+instructions; the script and templates stay canonical in
+release-notes-builder:
+
+1. Copy (not symlink) `release-notes-builder`'s
+   `.github/skills/release-notes/` folder into the target repository at the
+   same relative path: `.github/skills/release-notes/`.
+2. A plain copy has no path back to the release-notes-builder checkout, so
+   `$BUILDER_HOME` resolution's real-path strategy will fail here by
+   design — that's expected, not an error. On the first run in this repo,
+   either:
+   - answer the agent's one-time question for the checkout path (see
+     "Locating the builder script and templates" below) — it writes the
+     answer into a `.builder-home` file next to the copied `SKILL.md` so
+     later runs in this repo don't ask again, or
+   - create that file yourself first:
+     `echo /absolute/path/to/release-notes-builder > .github/skills/release-notes/.builder-home`.
+3. Decide whether to commit `.builder-home`: commit it only if every
+   teammate's release-notes-builder checkout lives at the same path (e.g. a
+   documented team convention or CI runner); otherwise add
+   `.github/skills/release-notes/.builder-home` to the target repo's
+   `.gitignore` and let each teammate generate their own on first use.
+4. Remember a copy doesn't auto-update: re-copy the folder whenever
+   release-notes-builder's skill instructions change, to pick up fixes and
+   new edge-case handling.
+
+**B2. Fully self-contained copy** — also vendor `build_release_notes.py`,
+`requirements.txt`, and the product's template(s) into the target repo, so
+it has zero runtime dependency on another local checkout (useful for CI
+runners, air-gapped machines, or once you're done needing
+release-notes-builder itself):
+
+1. Copy `build_release_notes.py`, `requirements.txt`, and a `templates/`
+   subfolder containing `base.md.j2` plus the specific product template(s)
+   this repo needs (e.g. `templates/kafka.md.j2`) into
+   `.github/skills/release-notes/` in the target repo, alongside `SKILL.md`
+   — i.e. reproduce the same layout release-notes-builder uses at its repo
+   root, just nested one level deeper. Keep the `templates/` subfolder name;
+   don't flatten template files directly next to `SKILL.md`, or
+   `$BUILDER_HOME/templates/<file>` references elsewhere in this skill won't
+   resolve.
+2. No `.builder-home` file or env var is needed: `$BUILDER_HOME` resolves to
+   this same skill folder because `build_release_notes.py` is found right
+   next to `SKILL.md` (see resolution step 2 below).
+3. **Trade-off to weigh before choosing B2 over B1**: this variant
+   duplicates the actual release-generation logic and product templates
+   rather than just the instructions.
+   - Bug fixes and template refinements made in release-notes-builder won't
+     reach this copy automatically — you have to notice and manually re-sync.
+   - A product's template is meant to be a single source of truth shared by
+     *all* of that product's repos (e.g. `kafka.md.j2` covers both
+     `kafka-operator` and `kafka-k8s-operator`); vendoring a copy into just
+     one of them risks the two drifting apart if the template is later
+     tweaked in only one place.
+   - The target repo now also needs `jinja2`/`requests` installed
+     (`pip install -r requirements.txt` from its vendored copy) to run the
+     script itself.
+   Prefer B1 unless the target repo genuinely must not depend on anything
+   outside itself at runtime.
+
+### Option C: zero setup — point the agent at the file directly
+
+Best for a single one-off run, or to try the skill before deciding whether
+to install it any other way. Requires nothing beyond having a local checkout
+of `release-notes-builder` somewhere:
+
+1. Open the target repository as the workspace (`release-notes-builder` does
+   not need to be added to it at all).
+2. In your chat message, tell the agent to follow the skill by its absolute
+   path instead of relying on discovery, e.g.:
+   > Using the skill instructions at
+   > `/home/you/release-notes-builder/.github/skills/release-notes/SKILL.md`,
+   > generate release notes for canonical/kafka-operator
+3. The agent reads that file directly like any other file — no skill
+   registration, symlink, or workspace change happens. `$BUILDER_HOME`
+   resolution (below) still works correctly because it only depends on the
+   real path of the `SKILL.md` that was loaded, not on how it was found.
+
+### Locating the builder script and templates ($BUILDER_HOME)
+
+Every reference in this skill to `build_release_notes.py` or
+`templates/<file>` means the copy inside the release-notes-builder checkout,
+resolved once per run — the same way regardless of which option (A–C) above
+was used to load these instructions, or standalone mode:
+
+1. Resolve the real path of whichever `SKILL.md` these instructions were
+   loaded from (following the symlink in Option A; the literal path given in
+   Option C; simply the workspace root in standalone mode) and take the
+   folder three levels up (`.github/skills/release-notes/../../..`) as
+   `$BUILDER_HOME`. Verify `build_release_notes.py` exists there. This step
+   is *expected* to fail for Option B1 (a plain instructions-only copy has
+   no real path back to release-notes-builder) — fall through to step 2
+   without treating it as an error.
+2. Check whether `build_release_notes.py` exists directly next to this
+   `SKILL.md` (i.e. colocated in the same folder, not three levels up). If
+   so, that folder itself is `$BUILDER_HOME` — this is what makes Option B2
+   (fully self-contained copy) work with no further configuration.
+3. Check for a `.builder-home` file colocated with this `SKILL.md` (i.e. at
+   `.github/skills/release-notes/.builder-home`, relative to wherever it was
+   loaded from). If present, its first line is the absolute path to
+   `$BUILDER_HOME`. This is the primary mechanism for Option B1 (see its
+   setup steps) but is checked in every option.
+4. If all of the above fail, check the `RELEASE_NOTES_BUILDER_HOME`
+   environment variable.
+5. If that's unset too, ask the user for the local path to their
+   release-notes-builder checkout (once). Then persist the answer so future
+   runs skip this ask: for Option B1, write it to
+   `.github/skills/release-notes/.builder-home` (per its setup steps 2–3);
+   otherwise suggest `export RELEASE_NOTES_BUILDER_HOME=...` in the user's
+   shell profile.
+
+The generated release notes themselves are **not** saved into
+`$BUILDER_HOME` when running in cross-repo mode (Options A–C) — they're
+saved into the currently open target repository instead (for Option B,
+that's the very repo the skill copy lives in, even for B2 where
+`$BUILDER_HOME` also happens to be inside it). See step 8 for the exact
+rule.
+
 ## Any generation verb triggers this skill
 
 Treat "generate", "create", "compile", "draft", "prepare", "write", "build",
@@ -143,7 +314,7 @@ involved. Follow these rules:
 | From-ref | See "Resolving from-ref" below | Tag/SHA/branch |
 | To-ref | HEAD of the branch | Tag/SHA/branch |
 | Product name / title | Derived from repos | e.g. "Charmed Apache Kafka" |
-| Output file | `release-notes/<product>-<to-ref>.md` | Relative to repo root |
+| Output file | See step 8: the target repo's existing release-notes location when run cross-repo, else `release-notes/<product>-<to-ref>.md` | Ask the user if no existing location can be found in the target repo |
 
 If the user gives only repositories, proceed with defaults and only ask
 about genuinely ambiguous things (see "Ask the user" below).
@@ -229,19 +400,24 @@ release notes of its own — the base template produces a generic DA186 skeleton
 that will not match the product's established structure, links or section
 names.
 
-1. **Look for an existing product template** in `templates/`. Match on the
-   *product*, not the repository: `templates/spark.md.j2` covers every
-   Charmed Apache Spark repo (`spark-k8s-bundle`, `kyuubi-k8s-operator`,
-   `charmed-spark-rock`, `spark-client-snap`, …), just as
-   `templates/kafka.md.j2` covers the Kafka repos. List the directory rather
-   than guessing a filename.
+1. **Look for an existing product template** in `$BUILDER_HOME/templates/`
+   (see "Locating the builder script and templates" above — this is
+   `templates/` at the release-notes-builder repo root, not the currently
+   open target repo). Match on the *product*, not the repository:
+   `templates/spark.md.j2` covers every Charmed Apache Spark repo
+   (`spark-k8s-bundle`, `kyuubi-k8s-operator`, `charmed-spark-rock`,
+   `spark-client-snap`, …), just as `templates/kafka.md.j2` covers the Kafka
+   repos. List the directory rather than guessing a filename.
 2. **If no template matches, create one** from the product's existing
    published release notes — do not proceed with the base template:
    a. Find the product's most recent published release notes. Best sources,
-      in order: `docs/reference/releases/` in the product's docs repo (fetch
-      the newest `revision-*.md` for the resolved track), the product's docs
-      site (`https://canonical.com/data/<product>/docs/<track>/reference/releases/`),
-      or a previously generated document in `release-notes/`.
+      in order: the currently open target repo's own releases folder if it
+      has one (e.g. `docs/reference/release-notes/`, `docs/reference/releases/`
+      — this is very likely, since that repo is the product's own repo in
+      cross-repo mode, and this same folder is also where step 8 will save
+      the new document), the product's docs site
+      (`https://canonical.com/data/<product>/docs/<track>/reference/releases/`),
+      or a previously generated document in `$BUILDER_HOME/release-notes/`.
    b. Read it in full and extract the structure that must be reproduced:
       frontmatter, title format, date format, intro wording, the links line,
       the **section names and their order** (products often rename or add
@@ -249,8 +425,9 @@ names.
       improvements" and adds "Documentation improvements", "Security" and
       "Acknowledgements"), per-component subheadings, entry link format, and
       the exact shape of the Security and Compatibility tables.
-   c. Write `templates/<product>.md.j2` that `{% extends "base.md.j2" %}` and
-      overrides the blocks it needs: `frontmatter`, `title`, `date_line`,
+   c. Write `$BUILDER_HOME/templates/<product>.md.j2` that
+      `{% extends "base.md.j2" %}` and overrides the blocks it needs:
+      `frontmatter`, `title`, `date_line`,
       `introduction`, `intro_links`, `changelog`, `security`,
       `compatibility`, `known_issues`, `footer`. Map the builder's fixed
       categories (`Features`, `Breaking changes`, `Security`, `Bug fixes`,
@@ -273,25 +450,30 @@ names.
 
 ### 3. Generate per-repo drafts
 
-Run the automation script once per repository, writing each draft to a
-temporary file (do not leave intermediate files in the repo root):
+Create one system temp directory for this run's intermediate drafts, e.g.
+`TMPDIR_DRAFTS=$(mktemp -d)` — never write intermediate files into either
+repo's tree (neither `$BUILDER_HOME` nor the currently open target repo).
+Then run the automation script once per repository, using `$BUILDER_HOME`
+(see "Locating the builder script and templates" above) to find the script
+and template:
 
 ```bash
-python build_release_notes.py \
+python "$BUILDER_HOME/build_release_notes.py" \
     --repo <owner/repo> \
     --from-ref <from-ref> \
     [--to-ref <to-ref>] \
     [--branch <branch>] \
-    --template templates/base.md.j2 \
+    --template "$BUILDER_HOME/templates/base.md.j2" \
     --title "<Component name>" \
     --use-prs \
-    --output .github/skills/release-notes/tmp/<repo>-draft.md
+    --output "$TMPDIR_DRAFTS/<repo>-draft.md"
 ```
 
 Notes:
-- Use the template resolved in step 2 (an existing `templates/<product>.md.j2`,
-  or the one you just created). `templates/base.md.j2` is only appropriate for
-  a product with no published release notes to model on.
+- Use the template resolved in step 2 (an existing
+  `$BUILDER_HOME/templates/<product>.md.j2`, or the one you just created).
+  `templates/base.md.j2` is only appropriate for a product with no published
+  release notes to model on.
 - `--use-prs` gives cleaner entries (PR titles) — prefer it.
 - If the script warns that the commit range was **truncated** (>250 commits),
   re-run with `--from-ref <last-sha>` for the remainder and merge the two
@@ -462,10 +644,35 @@ rather than leaving it as an aside — don't accumulate stale TODOs.
 
 ### 8. Save the final document
 
-1. Write the final document to `release-notes/<product>-<to-ref>.md`
-   (create the `release-notes/` directory if needed).
-2. Remove the temporary per-repo drafts in `.github/skills/release-notes/tmp/`.
+1. Determine the save location:
+   - **Cross-repo mode** (the currently open workspace is the target repo,
+     not release-notes-builder — the common case, see "Running this skill
+     from another repository" above): save into *that* repository, following
+     wherever its previous release notes already live — never into
+     `$BUILDER_HOME/release-notes/`:
+     a. If step 1 or step 2 already found the product's previously published
+        release notes inside the currently open repo's own tree (e.g. a
+        `docs/reference/release-notes/revision-315.md` the user linked to,
+        or a `docs/reference/releases/revision-*.md` found while building
+        the template), save the new document in that **same directory**,
+        following its exact naming convention (e.g. one file per revision:
+        `revision-316.md`).
+     b. Otherwise, search the currently open repo for a plausible existing
+        releases folder — common candidates: `docs/reference/release-notes/`,
+        `docs/reference/releases/`, `release-notes/`, `docs/releases/` — and
+        use whichever one contains existing revision/version-named files.
+     c. If no existing release-notes location can be found in the repo, ask
+        the user exactly where to save the file before writing anything —
+        do not guess or invent a path.
+   - **Standalone mode** (release-notes-builder is itself the open
+     workspace — see the note above the cross-repo options; no setup
+     needed): keep the existing default,
+     `release-notes/<product>-<to-ref>.md` at the repo root.
+2. Delete the temporary per-repo drafts directory created in step 3 (the
+   system temp dir) — never leave scratch files behind in either repo.
 3. Present the file to the user with a short summary of:
+   - Which repository and folder it was saved into, and why (mirrored an
+     existing folder's convention, or asked and used the user's answer).
    - Components covered and their commit ranges (and how from-ref was chosen).
    - Categories with notable highlights.
    - Any TODOs left in the review-notes comment for the user (compat values,
@@ -510,6 +717,11 @@ Verify the final document against the spec before saving:
 - [ ] If the input was a link to a previously published release-notes page,
       the generated document covers the *next* release after that page, not
       the release the page itself documents.
+- [ ] Saved to the correct location for this invocation mode (see step 8):
+      the target repo's existing release-notes folder — confirmed with the
+      user if none was found — in cross-repo mode; `release-notes/` in
+      standalone mode. Never saved into `$BUILDER_HOME/release-notes/` while
+      running in cross-repo mode.
 
 ## Reference
 
