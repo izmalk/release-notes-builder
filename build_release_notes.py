@@ -45,10 +45,15 @@ DA186_LABEL_CATEGORY_MAP: dict[str, str] = {
 }
 
 # 2. Legacy labels currently in use across Data charm repositories.
+# `documentation` is mapped explicitly because DA186 places documentation under
+# "Other improvements", and it is one of the most frequently applied labels —
+# relying on DEFAULT_CATEGORY for it would give the same result but would hide
+# a deliberate categorisation among the genuinely unlabelled PRs.
 LEGACY_LABEL_CATEGORY_MAP: dict[str, str] = {
     "bug": "Bug fixes",
     "enhancement": "Features",
     "not bug or enhancement": "Other improvements",
+    "documentation": "Other improvements",
     "breaking": "Breaking changes",
 }
 

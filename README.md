@@ -249,6 +249,7 @@ migration needed):
 | `bug` | Bug fixes |
 | `enhancement` | Features |
 | `not bug or enhancement` | Other improvements |
+| `documentation` | Other improvements |
 | `breaking` | Breaking changes |
 
 Matching rules:
