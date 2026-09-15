@@ -10,6 +10,7 @@ import argparse
 import os
 import re
 import sys
+import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 
@@ -107,6 +108,13 @@ NON_JIRA_PREFIXES: frozenset[str] = frozenset({"CVE"})
 # GitHub compare API returns at most 250 commits per response.
 GITHUB_COMPARE_LIMIT = 250
 
+# Transient-failure retry policy for GitHub API requests. The
+# `/commits/{sha}/pulls` endpoint intermittently returns 500s, and a run makes
+# one such request per commit, so without retries a long range is likely to fail
+# partway through and lose every call made so far.
+HTTP_MAX_RETRIES = 4
+HTTP_RETRY_BACKOFF = 1.5  # seconds; doubled on each subsequent attempt
+
 # ---------------------------------------------------------------------------
 # GitHub API helpers
 # ---------------------------------------------------------------------------
@@ -121,9 +129,50 @@ def _build_session(token: str | None) -> requests.Session:
     return session
 
 
+def _get_with_retry(
+    session: requests.Session,
+    url: str,
+    params: dict | None = None,
+) -> requests.Response:
+    """GET *url*, retrying transient failures with exponential backoff.
+
+    A single flaky response would otherwise abort a whole run and discard every
+    API call made so far — the `/commits/{sha}/pulls` endpoint in particular
+    returns intermittent 500s. Only server errors (5xx), 429 (rate limited) and
+    connection-level failures are retried; 4xx responses are returned as-is for
+    the caller to raise on, since retrying them cannot help.
+    """
+    last_exc: Exception | None = None
+
+    for attempt in range(HTTP_MAX_RETRIES):
+        try:
+            resp = session.get(url, params=params, timeout=30)
+        except requests.exceptions.RequestException as exc:
+            last_exc = exc
+        else:
+            if resp.status_code < 500 and resp.status_code != 429:
+                return resp
+            last_exc = requests.exceptions.HTTPError(
+                f"{resp.status_code} {resp.reason} for {url}", response=resp
+            )
+
+        if attempt < HTTP_MAX_RETRIES - 1:
+            delay = HTTP_RETRY_BACKOFF * (2 ** attempt)
+            print(
+                f"[warn] Request failed ({last_exc}); "
+                f"retrying in {delay:.1f}s "
+                f"({attempt + 2}/{HTTP_MAX_RETRIES})",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+
+    assert last_exc is not None
+    raise last_exc
+
+
 def github_get(session: requests.Session, url: str, params: dict | None = None) -> list | dict:
     """GET *url* and return parsed JSON. Raises on HTTP errors."""
-    resp = session.get(url, params=params, timeout=30)
+    resp = _get_with_retry(session, url, params)
     resp.raise_for_status()
     return resp.json()
 
@@ -134,7 +183,7 @@ def github_get_paginated(session: requests.Session, url: str, params: dict | Non
     params.setdefault("per_page", 100)
     results: list = []
     while url:
-        resp = session.get(url, params=params, timeout=30)
+        resp = _get_with_retry(session, url, params)
         resp.raise_for_status()
         results.extend(resp.json())
         # Follow Link: <…>; rel="next" header for subsequent pages.

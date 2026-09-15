@@ -219,6 +219,16 @@ The GitHub Compare API returns at most **250 commits** per request. If the range
 contains more, the script prints a red warning to stderr with the last commit
 SHA, so you can re-run with `--from-ref <that SHA>` and merge the results.
 
+### Transient API failures
+
+The script makes one `/commits/{sha}/pulls` request per commit, and that
+endpoint intermittently returns `500`. Such responses — along with `429` (rate
+limited) and connection errors — are retried up to `HTTP_MAX_RETRIES` times
+with exponential backoff (`HTTP_RETRY_BACKOFF`), printing a warning to stderr
+on each retry. `4xx` responses are not retried, since retrying cannot help.
+Without this, a single flaky response partway through a long range would abort
+the run and discard every API call made so far.
+
 ### Label → category mapping
 
 The changelog categories come from the
@@ -323,8 +333,15 @@ One template per **product**, shared by all of that product's repositories
 
 Working examples:
 
-* `templates/kafka.md.j2` — minimal extension: product links plus a
-  compatibility table, keeping the base DA186 section names and order.
+* `templates/kafka.md.j2` — modelled on the published Charmed Apache Kafka
+  notes: MyST frontmatter and anchor, no date line, Diátaxis cross-reference
+  links, `Improvements` instead of `Other improvements`, and PR-only entry
+  links.
+* `templates/opensearch.md.j2` — modelled on the published Charmed OpenSearch
+  notes: MyST frontmatter and anchor, a plain (non-bold) date line, category
+  headings at `###` because the product groups changes under per-component
+  `##` headings, bracketed Jira IDs with `([PR \#N](url))` links, and a
+  compatibility table with OpenSearch version and minimum Juju version columns.
 * `templates/spark.md.j2` — full restructure modelled on the published Charmed
   Apache Spark release notes: MyST frontmatter, product-specific section names
   and order (`Enhancements` instead of `Other improvements`, plus
@@ -360,6 +377,7 @@ release-notes-builder/
 ├── templates/
 │   ├── base.md.j2                  # Base DA186-compliant template
 │   ├── kafka.md.j2                 # Charmed Apache Kafka extension
+│   ├── opensearch.md.j2            # Charmed OpenSearch extension
 │   └── spark.md.j2                 # Charmed Apache Spark extension
 ├── examples/
 │   ├── DA186 - Release notes for Data charms.md   # Spec reference

@@ -735,5 +735,6 @@ Verify the final document against the spec before saving:
 - Example output: `examples/Example-release-notes-spec.md`
 - Builder script: `build_release_notes.py` (see `README.md` for CLI reference)
 - Templates: `templates/base.md.j2` (generic DA186 skeleton),
-  `templates/kafka.md.j2`, `templates/spark.md.j2` — product templates live
-  alongside the base and extend it (see step 2)
+  `templates/kafka.md.j2`, `templates/opensearch.md.j2`,
+  `templates/spark.md.j2` — product templates live alongside the base and
+  extend it (see step 2)

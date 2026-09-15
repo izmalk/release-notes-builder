@@ -1,0 +1,76 @@
+{# Charmed OpenSearch release notes template.
+
+   Reproduces the structure of the product's published release notes, most
+   recently revision 315:
+   https://canonical.com/data/opensearch/docs/2/reference/release-notes/revision-315/
+   source: canonical/opensearch-operator,
+           docs/reference/release-notes/revision-315.md
+
+   Differences from base.md.j2, and why:
+   - MyST frontmatter with `html_meta.description` and a
+     `(reference-release-notes-revision-N)=` anchor, as the docs build requires.
+   - Title is `# Revision N` (the docs site supplies the product name), and the
+     date line is plain text ("December 16, 2025"), not bold as in the base.
+   - Intro links use Diataxis cross-references (`how-to-deploy-standard`,
+     `how-to-minor-upgrade`, `reference-system-requirements`) resolved by the
+     docs build, not absolute URLs.
+   - Category headings render at `###`, not `##`, because this product groups
+     changes under a per-component `## <Component name>` heading first (e.g.
+     `## Charmed OpenSearch`, `## Charmed OpenSearch Dashboards`). The builder
+     handles one repository per run, so it emits the `###` category headings
+     only — the merge/polish pass adds the `## <Component name>` heading above
+     each component's block. Section names themselves match DA186 exactly
+     (Features / Bug fixes / Other improvements), so no renaming is needed.
+   - Entries use `* ` bullets, wrap Jira IDs in square brackets, and link the
+     PR as `([PR \#N](url))` with an escaped `#` — no commit link:
+     `* [[DPE-1234](url)] message ([PR \#612](url))`
+   - Compatibility is a per-charm table with an OpenSearch version column, a
+     "Minimum Juju version" column and an Artifacts (snap) column; revisions
+     link to a `tree/revNNN` tag, not to a release page.
+#}
+{% extends "base.md.j2" %}
+
+{% block frontmatter %}
+---
+myst:
+  html_meta:
+    description: "Charmed OpenSearch {{ title }} release notes - TODO: one-sentence summary of the headline changes."
+---
+
+(reference-release-notes-{{ title | lower | replace(" ", "-") }})=
+{% endblock %}
+
+{% block date_line %}
+
+{{ date }}
+{% endblock %}
+
+{% block introduction %}
+
+<!-- TODO: Write a brief summary of the most important changes in this release. -->
+
+{% block intro_links %}
+[Charmhub](https://charmhub.io/opensearch) | [Deploy guide](how-to-deploy-standard) | [Upgrade instructions](how-to-minor-upgrade) | [System requirements](reference-system-requirements)
+{% endblock %}
+{% endblock %}
+
+{% block changelog %}
+{% for category in category_order %}
+{% if categories.get(category) %}
+
+### {{ category }}
+
+{% for entry in categories[category] %}
+* {% if entry.jira_ids %}{% for jira in entry.jira_ids %}[[{{ jira }}](https://warthogs.atlassian.net/browse/{{ jira }})]{% endfor %} {% endif %}{{ entry.message }}{% if entry.pr_number %} ([PR \#{{ entry.pr_number }}]({{ entry.pr_url }})){% endif %}
+
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endblock %}
+
+{% block compatibility %}
+| Charm | Revision | Hardware architecture | OpenSearch version | Minimum Juju version | Artifacts |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Charmed OpenSearch | TODO | AMD64 | TODO | 3.5+ | Snap: TODO |
+| Charmed OpenSearch Dashboards | TODO | AMD64 | TODO | 3.5+ | Snap: TODO |
+{% endblock %}
