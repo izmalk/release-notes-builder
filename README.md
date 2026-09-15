@@ -24,6 +24,7 @@ and in where the document ends up. Pick one before reading further:
 | **This repo** | Not cloned, not open | Cloned and open |
 | **Output goes to** | Inside the product repo, next to its existing release notes | `release-notes/` here |
 | **Docs & sources on hand** | Yes — the agent can read `charmcraft.yaml`, previous notes, etc. | No — everything comes from the GitHub API |
+| **Shortest request** | "Generate release notes" — target auto-detected | Must name the repo |
 
 **Option A is the recommended one.** The skill needs to read the target repo's
 metadata and previous release notes to write the compatibility table and to
@@ -65,15 +66,38 @@ Full details, including how `$BUILDER_HOME` is resolved, are in
 
 ### Usage from the target repo
 
-Open the **product's own repository** as your workspace and ask the agent for
-release notes, for example:
+Open the **product's own repository** as your workspace and simply ask:
+
+> Generate release notes
+
+That's the whole request. With nothing named, the skill takes the open
+repository as the target: it reads the `origin` remote for `owner/repo`, works
+out the product name from `charmcraft.yaml` and the docs, finds the newest
+release-notes file in the repo's own docs tree, and generates the release
+*after* the one that file documents — up to the current branch HEAD. It reports
+every inference it made instead of interrogating you first.
+
+You can still be explicit when you need a different scope:
 
 > Generate release notes for canonical/kafka-operator and
 > canonical/kafka-k8s-operator from rev247 to rev248
 
-or — most conveniently — by linking the **previously published** release-notes
-page, from which the skill derives the product, the track, the starting ref and
-the component list, and generates the *next* release after it:
+Name a starting point as a revision, version, tag or commit SHA and it takes
+priority over everything the skill would otherwise detect:
+
+> Release notes since rev247
+
+> Everything from 2.1.0
+
+The skill matches the name you used against the repo's actual tags (which may
+be `rev247`, `revision-247`, `v2.1.0` …), checks the ref really is an ancestor
+of the branch, and treats it **exclusively** — you get the release *after* the
+one you named. If your phrasing could also mean "document that release itself",
+it asks rather than shifting every entry by one release.
+
+Or point at a **previously published** release-notes page, from which the skill
+derives the product, the track, the starting ref and the component list, and
+generates the *next* release after it:
 
 > Create release notes for
 > https://canonical.com/data/opensearch/docs/2/reference/release-notes/revision-315/
@@ -83,10 +107,48 @@ Add `auto-sort on` (or `off`) to skip the question about reclassifying the
 
 > Create release notes for canonical/opensearch-operator with auto-sort on
 
+### First release: no previous notes to build on
+
+A brand-new charm has no published release notes, so there's nothing to derive
+the starting ref, component list, structure or save location from. The skill
+handles this explicitly rather than failing: it first confirms none exist
+(checking the repo tree, the docs site and its own output folder and telling you
+so), then falls back to the latest ancestor tag for the starting point — or, if
+the repo has no tags at all, proposes the repo's first commit and asks you to
+confirm, since a whole-history changelog can be long.
+
+This is also the **only** case where the generic `base.md.j2` template is
+correct: with no established structure to reproduce, there's nothing to model a
+product template on. The skill asks where the release notes should live rather
+than inventing a path, proposing the conventional one for your docs layout, and
+writes the introduction as a first release rather than as a diff against a
+predecessor.
+
 The skill then resolves the refs, confirms the sibling components with you, runs
 the builder once per repository, merges the drafts, and writes the introduction
 and compatibility table. The full path is described in
 [End-to-end workflow](#end-to-end-workflow).
+
+### When it asks, and when it doesn't
+
+The dividing line is whether exactly one answer is *determinable* — not whether
+you happened to supply it:
+
+- **Determinable → inferred and reported.** The repository, product, track,
+  branch and starting ref all come from the open workspace and its docs. The
+  skill states what it concluded instead of asking you to repeat it.
+- **Ambiguous, contradictory, absent or unclear → it asks.** Two candidate
+  release-notes folders; a branch that implies one track while the docs imply
+  another; a compatibility value with no source in the repo; an empty commit
+  range; a `from-ref` that isn't an ancestor of the branch; a request that can
+  be read two ways. It also always asks before adding a sibling component it
+  discovered but you didn't name.
+
+Questions are batched into a single message, each stating what was already
+established, the candidates found and where, and a recommended answer you can
+confirm in one word. Unresolved ambiguities are never quietly buried as TODOs —
+those are reserved for actions only you can take, such as the final published
+revision number.
 
 ### Output location in the target repo
 
@@ -137,13 +199,15 @@ refreshing.
 
 ### Usage from this repo
 
-Ask the agent exactly as in
-[option A](#usage-from-the-target-repo) — the requests are identical, and
-`--repo` is not limited to this repository:
+Name the target repository explicitly — otherwise the requests are the same as
+in [option A](#usage-from-the-target-repo), and `--repo` is not limited to this
+repository:
 
 > Generate release notes for canonical/kafka-operator from rev247 to rev248
 
-Because the target repo isn't open, the agent can't read its `charmcraft.yaml`,
+Here the target **must** be named: a bare "generate release notes" has nothing
+to detect, because the open workspace is the tool rather than a product. And
+because the target repo isn't open, the agent can't read its `charmcraft.yaml`,
 sibling metadata or previously published notes, so the compatibility table and
 the product template may need more manual work than in option A.
 
@@ -236,15 +300,19 @@ performed by the agent skill; you only do 1 and 2.
    workspace, having copied `SKILL.md` into your personal skills folder once
    (see [Installation](#installation-copy-one-file)). No clone of this repo is
    needed — the skill downloads the script and templates itself on first use.
-3. **You ask the agent for release notes**, identifying the release either by
-   naming repositories and refs, or — most conveniently — by linking the
-   **previously published** release-notes page. From that link the skill
-   derives the product, the track, the starting ref, and the component list,
-   and generates the *next* release after it.
+3. **You ask the agent for release notes** — usually with nothing else at all.
+   The skill then detects the target from the open workspace: `owner/repo` from
+   the `origin` remote, the product from `charmcraft.yaml` and the docs, and the
+   previous release from the newest file in the repo's own release-notes folder.
+   You can instead name repositories and refs explicitly, or link the
+   **previously published** release-notes page, from which the skill derives the
+   product, the track, the starting ref, and the component list, and generates
+   the *next* release after it.
 4. **The skill resolves scope and references**: the track (one track per
-   document by default), the branch, `from-ref` (user-specified → latest
-   ancestor tag/release → last documented release in the docs → ask you), and
-   `to-ref` (branch HEAD by default).
+   document by default), the branch, `from-ref` (user-specified → the open
+   repo's newest documented release → latest ancestor tag/release → the docs
+   site → ask you), and `to-ref` (branch HEAD by default). It reports what it
+   inferred rather than asking you to supply it.
 5. **The skill discovers the product's sibling components** — companion charms,
    snaps, rocks, Terraform modules, dashboards — from the previous release
    notes, and **asks you to confirm each one** before adding it to scope. It

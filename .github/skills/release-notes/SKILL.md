@@ -1,6 +1,6 @@
 ---
 name: release-notes
-description: 'Generate DA186-compliant release notes for Canonical Data & AI charms. Use when the user asks to "generate release notes", "create release notes", "compile a changelog", "prepare release notes draft", or a similar phrasing/verb, for one or multiple charm repositories (e.g. canonical/kafka-operator) or a link to a previously published release-notes page, optionally for a branch, track, or a commit range. Gathers changes via GitHub API, discovers sibling components from prior release notes, merges multi-repo notes into a single product draft, writes intro and compatibility sections, and saves the result locally for review. Never publishes anything.'
+description: 'Generate DA186-compliant release notes for Canonical Data & AI charms. Use when the user asks to "generate release notes", "create release notes", "compile a changelog", "prepare release notes draft", or a similar phrasing/verb — including bare requests with no repository, product, or ref named at all ("generate release notes", "write the next release notes"), which mean the currently open repository, with the product, refs and components auto-detected from its own docs. Also accepts one or multiple charm repositories (e.g. canonical/kafka-operator), a link to a previously published release-notes page, or an explicit starting point named as a revision, version, tag or commit SHA ("since rev247", "from 2.1.0", "changes after revision 315"), optionally for a branch, track, or a commit range. Handles a product''s very first release notes, where no previous notes exist to build on. Gathers changes via GitHub API, discovers sibling components from prior release notes, merges multi-repo notes into a single product draft, writes intro and compatibility sections, and saves the result locally for review. Never publishes anything.'
 argument-hint: '[repo ...] [--track TRACK] [--branch BRANCH] [--from-ref REF] [--to-ref REF] [auto-sort on|off]'
 ---
 
@@ -15,8 +15,24 @@ repository.
 
 ## When to Use
 
+- **"Generate release notes"** — with no repository, product, track or ref
+  named at all. This is the most common request, and it means *this*
+  repository: detect everything from the currently open workspace (see
+  "Starting from the currently open repository" below). Never respond to a
+  bare request by asking which repository is meant — the answer is the one
+  that's open.
+- "Write the next release notes", "time for release notes", "release notes
+  for the upcoming revision", "changelog since the last release" — same
+  thing, still no explicit target
 - "Generate release notes for canonical/kafka-operator"
 - "Prepare release notes for Kafka 4.2 from rev247 to rev248"
+- "Release notes since rev247", "changes after revision 315", "everything
+  since 2.1.0", "from a1b2c3d to HEAD" — an explicit starting point given as a
+  revision, version, tag or commit SHA; see "Starting from a revision,
+  version, tag or commit the user names" below
+- "Write the first release notes for this charm" — a product with no published
+  release notes yet; see "First release: a product with no release notes yet"
+  below
 - "Compile release notes for https://github.com/canonical/kafka-operator and https://github.com/canonical/kafka-connect-operator as one product"
 - "Draft release notes for the 14/stable channel of postgresql-operator"
 - "Create release notes for https://canonical.com/data/opensearch/docs/2/reference/release-notes/revision-315/"
@@ -145,6 +161,132 @@ no bearing on scope or thoroughness: don't skip template selection, sibling-
 component discovery, compatibility, or the DA186 checklist just because the
 user said "create" instead of "generate".
 
+## Infer what's determinable; ask about what isn't
+
+Two failure modes matter equally, and the line between them is **confidence**,
+not effort:
+
+- **Interrogating the user about things you could have worked out** wastes
+  their time. Anything with exactly one plausible answer available from the
+  open workspace, the repos, or the GitHub API must be resolved silently and
+  merely *reported* — never asked about.
+- **Guessing at things you cannot actually determine** silently produces a
+  document that misrepresents the release, which is worse. A release-notes
+  document is a public factual record; a wrong revision number, a missing
+  component or an invented compatibility value is a real defect.
+
+So: **whenever an input is ambiguous, contradictory, undefined, or you are
+not confident in an inference, stop and ask the user.** Concretely, ask when:
+
+- **Several candidates fit and nothing decides between them** — e.g. two
+  plausible release-notes folders, multiple git remotes, several tracks whose
+  branches all look current, two files that both look like "the newest
+  release".
+- **Sources of truth disagree** — e.g. the current branch implies one track
+  but the docs' default version implies another; `charmcraft.yaml` and the
+  docs give different product names; the newest documented revision is *ahead*
+  of the latest tag.
+- **A value is required but absent** — no release-notes folder anywhere, no
+  resolvable `from-ref`, a compatibility field with no source in the repo.
+- **The request itself is unclear** — an unfamiliar term, an ambiguous ref
+  ("the last release" in a repo with both tags and documented revisions), a
+  product name matching several products, or a scope you can read two ways
+  ("the Kafka release notes" when both `kafka-operator` and
+  `kafka-k8s-operator` are in play and you can't tell if one document or two
+  is wanted).
+- **Something looks wrong rather than merely missing** — an empty commit
+  range, a `from-ref` that isn't an ancestor of the branch, a range covering
+  suspiciously many or few commits, a detached HEAD, or uncommitted changes to
+  the very release-notes folder you're about to write into.
+
+When you ask, ask **well**: state what you already established, name the
+specific ambiguity, list the concrete candidates you found and where each came
+from, say which one you'd pick and why, and — where it's safe — offer to
+proceed with that default. A question the user can answer with one word beats
+an open-ended one. Batch every open question you have into a single message
+rather than drip-feeding them (see step 7), and never block on a question
+whose answer you can look up yourself.
+
+Never paper over an unresolved ambiguity with a `TODO` in the review notes
+**when the user is available to settle it** — TODOs are for actions only the
+release owner can take (final revision numbers, artefact links), not for
+decisions you avoided making or asking about.
+
+## Starting from the currently open repository (nothing named)
+
+When the user asks for release notes **without naming a repository, product,
+track or ref** — "generate release notes" and nothing more — they mean the
+repository that is currently open. Do **not** ask which repo, which product or
+which revision: infer all of it, then state what you inferred and proceed.
+Only ask if a specific inference step below genuinely fails.
+
+This is the default path in cross-repo mode. Resolve it like this:
+
+1. **Identify the repository.** Read the workspace's `origin` remote:
+   ```bash
+   git -C . remote get-url origin    # → git@github.com:canonical/opensearch-operator.git
+   git -C . rev-parse --abbrev-ref HEAD
+   ```
+   Normalise the remote to `owner/repo` (strip `git@github.com:`,
+   `https://github.com/`, and a trailing `.git`). If the open workspace is
+   **release-notes-builder itself**, this is standalone mode, and a bare
+   request has no target — that is the one case where you must ask which
+   repository or product to generate for, since this repo is the tool, not a
+   product. Ask which repository to use, rather than guessing, if: there is no
+   `origin` (list the remotes you did find and ask which to use); the
+   workspace isn't a git repo at all; or it's a multi-root workspace with
+   several candidate product repos open.
+2. **Identify the product** from the repo: its `charmcraft.yaml` /
+   `metadata.yaml` display name, its docs (`docs/index.md`, `README.md`), or
+   its previous release notes' title. Prefer the product name the existing
+   docs use verbatim (e.g. "Charmed OpenSearch", not "opensearch-operator") —
+   the document is named after the product, never after one component. If
+   these sources disagree on the product name, or the repo could belong to
+   more than one product, ask which to use and quote what each source said.
+3. **Find the product's release notes inside the open repo** — this is the
+   richest source available and the reason this mode is preferred. Search the
+   repo's own tree for an existing releases folder; common candidates:
+   `docs/reference/release-notes/`, `docs/reference/releases/`,
+   `release-notes/`, `docs/releases/`. Take the **newest** document in it,
+   determined by the revision/version in the filename or title (e.g.
+   `revision-315.md` over `revision-314.md`), not by file mtime. Ask the user
+   which to use when **more than one** such folder exists and both hold
+   revision-named files, or when the newest document can't be picked
+   unambiguously (e.g. per-track subfolders, or files named inconsistently so
+   ordering is unclear). Name the candidates and your preferred pick.
+4. **Derive everything else from that newest document**, exactly as in
+   "Starting from a link to previously published release notes" below — the
+   only difference is that the page is a local file rather than a URL, so read
+   it from disk instead of fetching it:
+   - **from-ref** — the revision/tag it documents. Generate the release
+     *after* it; never regenerate the revision it documents.
+   - **Track** — from its path or frontmatter, cross-checked against the
+     current branch and the docs' default track.
+   - **The component list** — every component subheading and Compatibility
+     row, which feeds the sibling-component confirmation in step 1.4.
+   - **The structure to reproduce** — use it as the reference document for
+     template selection in step 2, and save the new document into this same
+     folder in step 8, following its naming convention.
+5. **Set `to-ref` to the current branch's HEAD** (the default: omit
+   `--to-ref`). A bare request means "everything released since the last
+   documented release, up to where the branch is now". Use the branch that is
+   currently checked out, unless it isn't the resolved track's branch — then
+   prefer the track's branch and say so. If HEAD is detached, or the checked-out
+   branch belongs to a different track than the newest release notes, ask which
+   branch to release from rather than picking silently.
+6. **If the repo has no release-notes folder at all**, fall back in this
+   order before asking anything: the product's docs site
+   (`https://canonical.com/data/<product>/docs/`), then the tag-based
+   `from-ref` resolution in step 1.3.b. Ask the user only if both fail.
+   Likewise, if the resolved range turns out to be **empty** (nothing merged
+   since the last documented release), don't produce an empty document — report
+   it and ask whether to pick an earlier `from-ref` or stop.
+7. **Report the inferences** in your first substantive reply and in the
+   review-notes comment: repository, product, track, branch, `from-ref` and
+   the file it came from. The user gave you nothing, so they must be able to
+   check every assumption you made — but report it as a statement of what
+   you're doing, not as a question blocking the run.
+
 ## Starting from a link to previously published release notes
 
 Sometimes the user points at an already-published release-notes page instead
@@ -173,6 +315,116 @@ generate:
      from this page instead of searching elsewhere.
 2. Note in the review-notes comment that this link was the source used to
    resolve `from-ref`, the track, and the component list.
+
+## Starting from a revision, version, tag or commit the user names
+
+When the user names a starting point — "release notes from rev247", "since
+2.1.0", "changes since revision 315", "from a1b2c3d to HEAD", "everything
+after the 3.5.1 release" — that value is `from-ref` and takes priority over
+every other source (step 1.3.a). Don't go looking for the last documented
+release: the user has already told you where to start. Two things still need
+care.
+
+**Resolve the name they used to an actual Git ref.** Users say "revision 315"
+or "rev315" or "315"; the repo's tags may be `rev315`, `revision-315`, `315`,
+`v2.1.0` or `2.1.0`. List the repo's tags and match, rather than assuming a
+naming scheme:
+
+```bash
+gh api "repos/canonical/<repo>/tags" --jq '.[].name' | head -30
+```
+
+- If exactly one tag plausibly corresponds, use it and say which you picked.
+- If a bare number could match several tags (e.g. `rev315` and `315`), or the
+  named revision has no tag at all, ask — don't silently substitute a
+  neighbouring revision. A charm *revision* number is not always a Git tag:
+  some products tag releases by workload version instead, in which case ask
+  which tag or SHA corresponds to that revision.
+- A 7–40 character hex string is a commit SHA; use it directly.
+- If the ref exists but is **not an ancestor of the resolved branch** (e.g. it
+  was tagged on another track), say so and ask, rather than producing a range
+  that spans tracks.
+
+**The range is exclusive of `from-ref` and inclusive of `to-ref`.** The builder
+reports changes *after* `from-ref`, so "from revision 315" produces the release
+*following* 315 — the same convention as starting from a published
+release-notes page. If the user's phrasing suggests they meant to *include* the
+named release ("the release notes for revision 315 itself", "document rev315"),
+that's the opposite intent: they want `from-ref` to be the revision *before*
+it. When the phrasing is genuinely ambiguous, ask which they mean — getting
+this wrong shifts every entry in the document by one release.
+
+Also note:
+
+- **An explicit `to-ref`** ("from rev247 to rev248", "up to 2.2.0") is used
+  verbatim; resolve it to a tag the same way. Without one, `to-ref` stays the
+  branch HEAD.
+- **Derive the title from `to-ref`** when the user gave one (e.g. `rev248` →
+  "Revision 248"); when `to-ref` is HEAD, the release being documented is the
+  *next* revision after `from-ref`, so title it accordingly and leave an
+  imperative TODO to confirm the final published number.
+- **A user-named `from-ref` doesn't remove the need for the other discovery
+  steps.** Still resolve the track, still check the product's previous release
+  notes for sibling components (step 1.4) and for the document structure to
+  reproduce (step 2) — the user pinned the range, not the scope or the format.
+- **Per-repo refs differ.** In a multi-component product, a revision number
+  the user gives usually applies to the *primary* charm only; resolve each
+  sibling component's own `from-ref` normally, and don't apply the primary's
+  tag name to repos that don't have it.
+
+## First release: a product with no release notes yet
+
+A product may have no published release notes at all — a new charm, or one
+whose notes have never been written. Nothing above can then supply `from-ref`,
+the component list, the structure, or the save location, so handle it
+explicitly instead of failing or inventing values.
+
+First, **be sure that's actually the case**: absence of evidence here is easy
+to get wrong. Check the repo's own tree (all the candidate folders in
+"Starting from the currently open repository"), the product's docs site, and
+`$BUILDER_HOME/release-notes/` for a previously generated document. Say
+explicitly that you found none — don't let it pass silently, since the user
+may know where they live.
+
+Then adapt each step:
+
+1. **`from-ref`** — there is no last-documented-release to start after. Use
+   the latest tag/release that is an ancestor of the branch (step 1.3.b) if the
+   repo has tags. If it has **no tags either**, this is a genuine first
+   release: propose the repo's first commit (
+   `git rev-list --max-parents=0 HEAD`, or the earliest commit on the branch)
+   so the document covers the project's whole history, and confirm that with
+   the user before generating — a first-release changelog can be very long,
+   and they may prefer a shorter starting point.
+2. **Template** — this is the one legitimate use of
+   `templates/base.md.j2`: with no published notes to model on, there is no
+   established structure to reproduce, so the generic DA186 skeleton is
+   correct. The prohibition in step 2 applies only to products that *do* have
+   published notes. Don't fabricate a `templates/<product>.md.j2` from a
+   sibling product's notes — but do reuse the same product's template if one
+   already exists for another of its components.
+3. **Sibling components** — step 1.4's discovery source doesn't exist. Fall
+   back to the repo itself: a bundle or Terraform module listing companion
+   charms, `charmcraft.yaml`/`metadata.yaml` resources naming a rock or snap,
+   or an obvious `*-k8s-operator` counterpart in the same org. Present
+   whatever you find and ask which components this document should cover —
+   still never adding one silently.
+4. **Compatibility** — there is no previous table to bump, so build it from
+   the repo's own sources of truth (`charmcraft.yaml` platforms/bases,
+   `metadata.yaml`, snap/rock metadata, the release tag's assets). Ask for any
+   value with no source in the repo rather than leaving the table thin.
+5. **Introduction** — write it as a first release: what the product is and
+   what it now supports, rather than a diff against a predecessor. Avoid
+   phrasing that implies a previous revision the reader could consult.
+6. **Save location** — step 8's "mirror the existing folder" rule has nothing
+   to mirror. Ask the user where the product's release notes should live, and
+   propose the conventional path for the repo's docs layout (e.g.
+   `docs/reference/release-notes/revision-<N>.md` if the repo already uses a
+   Diátaxis `docs/reference/` tree). Create the folder only once the user
+   confirms it.
+7. **Record it** — note in the review notes that this is the product's first
+   release-notes document, which sources you checked to establish that, and
+   the starting point the user agreed to.
 
 ## Track / channel scope (single track by default)
 
@@ -397,24 +649,32 @@ involved. Follow these rules:
 
 | Input | Default | Notes |
 |-------|---------|-------|
-| Repositories | — (required, unless given as a previous release notes link) | `owner/repo` or full GitHub URL; one or more |
-| Previous release notes link | — (optional alternate to naming repos) | A URL to an already-published release-notes page (e.g. a `revision-NNN` docs page); resolves product, track, from-ref, and component list — see "Starting from a link to previously published release notes" |
+| Repositories | **The currently open repository** (from its `origin` remote) | `owner/repo` or full GitHub URL; one or more. Never required: a bare request means the open repo — see "Starting from the currently open repository" |
+| Previous release notes link | — (optional alternate to naming repos) | A URL to an already-published release-notes page (e.g. a `revision-NNN` docs page); resolves product, track, from-ref, and component list — see "Starting from a link to previously published release notes". The open repo's own newest release-notes file serves the same purpose automatically |
 | Track | The documentation's default track (see above) | Ask if it can't be determined |
 | Branch | The track's branch (repo default branch if single-track product) | Resolve via GitHub API |
-| From-ref | See "Resolving from-ref" below | Tag/SHA/branch |
+| From-ref | Step 1.3's priority order: user-specified → latest ancestor tag → last documented release → first commit (first release) → ask | Tag/SHA/branch, or a revision/version the user names — see "Starting from a revision, version, tag or commit the user names" |
 | To-ref | HEAD of the branch | Tag/SHA/branch |
 | Product name / title | Derived from repos | e.g. "Charmed Apache Kafka" |
 | Auto-sort | **Off** | Reclassify the "Other improvements" catch-all by conventional-commit prefix. Ask once if not specified; the user can say "auto-sort on/off" — see "Auto-sort" above |
 | Output file | See step 8: the target repo's existing release-notes location when run cross-repo, else `release-notes/<product>-<to-ref>.md` | Ask the user if no existing location can be found in the target repo |
 
-If the user gives only repositories, proceed with defaults and only ask
-about genuinely ambiguous things (see "Ask the user" below).
+If the user gives only repositories — or nothing at all — proceed with
+defaults and only ask about genuinely ambiguous things (see "Ask the user"
+below).
 
 ## Procedure
 
 ### 1. Resolve references
 
-First resolve the track scope (see "Track / channel scope" above) — this is
+First, if the user named no repository, resolve the target from the currently
+open workspace and its own release notes (see "Starting from the currently
+open repository" above). That single step usually settles the repo, product,
+track, `from-ref` and component list at once, so do it before the batched
+resolution below and treat its results as "user-specified" for the priority
+rules that follow.
+
+Then resolve the track scope (see "Track / channel scope" above) — this is
 a fixed, small cost regardless of repo count (see "Keep data gathering lean").
 Then resolve refs for all repositories **in one batched pass**, not
 repo-by-repo:
@@ -433,17 +693,25 @@ repo-by-repo:
    call needed here.
 3. Determine `from-ref` for every repo (in priority order, batching each
    check across all repos before moving to the next priority level):
-   a. User-specified ref.
+   a. User-specified ref — a revision, version, tag or SHA named in the
+      request. Resolve the name to a real tag and settle the
+      inclusive/exclusive question per "Starting from a revision, version,
+      tag or commit the user names" above.
    b. The most recent tag/release that is an ancestor of the branch: list
       the latest few tags for all repos in one loop
       (`gh api repos/{owner}/{repo}/tags --jq '.[0:5]'`), then confirm
       ancestry with one `compare` call per candidate tag — stop at the first
       one that's an ancestor.
    c. Only for repos where (b) didn't resolve: the last documented release
-      in the product's documentation — fetch the *one* release-notes page
-      for the resolved track (not other tracks), and use the revision/tag it
-      documents.
-   d. If neither can be determined, ask the user which ref to start from.
+      in the product's documentation — prefer the **newest release-notes file
+      in the currently open repo's own docs tree** (no network needed, and
+      it's the product's own source of truth), else fetch the *one*
+      release-notes page for the resolved track (not other tracks) from the
+      docs site. Use the revision/tag it documents.
+   d. If the product has no release notes and no tags at all, treat it as a
+      first release — see "First release: a product with no release notes
+      yet" above — and confirm the starting point with the user.
+   e. If neither can be determined, ask the user which ref to start from.
 4. **Check for sibling components not named by the user.** Even when the
    user names (or links to) only one main charm/repo, a product's release
    notes often cover additional components that ship alongside it — a
@@ -489,7 +757,9 @@ Before generating any draft, decide which Jinja template to render with.
 **Never** fall back to `templates/base.md.j2` for a product that has published
 release notes of its own — the base template produces a generic DA186 skeleton
 that will not match the product's established structure, links or section
-names.
+names. The single exception is a product with **no** published release notes,
+where there is no established structure to match and the base template is the
+right choice (see "First release: a product with no release notes yet").
 
 1. **Look for an existing product template** in `$BUILDER_HOME/templates/`
    (see "Locating the builder script and templates" above — this is
@@ -498,7 +768,10 @@ names.
    `templates/spark.md.j2` covers every Charmed Apache Spark repo
    (`spark-k8s-bundle`, `kyuubi-k8s-operator`, `charmed-spark-rock`,
    `spark-client-snap`, …), just as `templates/kafka.md.j2` covers the Kafka
-   repos. List the directory rather than guessing a filename.
+   repos. List the directory rather than guessing a filename. If it's unclear
+   whether an existing template belongs to this product (e.g. the product
+   could plausibly map to two of them), ask rather than rendering through a
+   template that may not match.
 2. **If no template matches, create one** from the product's existing
    published release notes — do not proceed with the base template:
    a. Find the product's most recent published release notes. Best sources,
@@ -509,6 +782,12 @@ names.
       the new document), the product's docs site
       (`https://canonical.com/data/<product>/docs/<track>/reference/releases/`),
       or a previously generated document in `$BUILDER_HOME/release-notes/`.
+      **If none of these yields any published release notes**, stop here and
+      use `base.md.j2` — this is a first release (see "First release: a
+      product with no release notes yet"). Don't model the template on a
+      *different* product's notes, and don't write a
+      `templates/<product>.md.j2` with invented structure; the product's
+      conventions will be established by this very document.
    b. Read it in full and extract the structure that must be reproduced:
       frontmatter, title format, date format, intro wording, the links line,
       the **section names and their order** (products often rename or add
@@ -656,6 +935,9 @@ Based on the contents of the merged draft, write the intro (replacing the
   breaking changes, workload version bumps). Write it as the final,
   publishable summary — see "Fully publishable output" below; do not call
   the document a draft anywhere in this text.
+- **For a first release** there is no predecessor to diff against: introduce
+  what the product is and what this release supports, and don't imply an
+  earlier revision the reader could compare with or upgrade from.
 - Below it, the links line per DA186: Charmhub | Deploy guide | Upgrade
   instructions | System requirements. Derive the URLs from the product's
   docs (e.g. `https://canonical.com/data/docs/<product>/iaas/...`); if the
@@ -686,14 +968,29 @@ ensure it is correct and up to date:
   take the latest two consecutive tag numbers on the branch as the AMD64/ARM64
   pair by default (see "Keep data gathering lean") instead of confirming via
   workflow logs. Mark the pairing as a TODO for the release owner to verify.
-- If a value cannot be determined from the repo, leave a clearly marked
-  `TODO` and flag it in the review notes — do not guess.
+- If a value cannot be determined from the repo, **ask the user for it** —
+  batched with your other questions in step 7 — rather than guessing. Only
+  fall back to a clearly marked `TODO`, flagged in the review notes, for
+  values the user can't supply either or that genuinely can't be known until
+  release time (e.g. the final published revision number).
+- If two sources give conflicting values (e.g. `charmcraft.yaml` says one base
+  and the previous release notes another), don't silently prefer one: quote
+  both and ask which is correct.
 
-### 7. Ask the user (only when needed)
+### 7. Ask the user (whenever something is genuinely unclear)
 
-Query the user for a preferred resolution when:
+The governing rule is "Infer what's determinable; ask about what isn't" above:
+**anything ambiguous, contradictory, undefined, or not confidently inferable
+must be raised with the user rather than guessed at or quietly left as a
+TODO.** The list below is the set of cases known to recur, not an exhaustive
+one — if you hit an ambiguity that isn't listed, ask anyway.
 
-- The from-ref could not be determined automatically (step 1.3.d).
+Always query the user for a preferred resolution when:
+
+- The from-ref could not be determined automatically (step 1.3.d), or more
+  than one candidate is equally plausible.
+- The resolved range is **empty**, or the range's size looks implausible for
+  the release being described.
 - The commit range was truncated and the user should choose how to proceed.
 - Two entries look like the same change but differ in wording (possible
   double-count) and it is not obvious which to keep.
@@ -713,9 +1010,30 @@ Query the user for a preferred resolution when:
   it targets shipped behaviour or only tooling, and auto-sort is enabled —
   leave it in place and flag it rather than asking per entry; only ask if
   several such entries would materially change the release's shape.
+- The track can't be determined confidently, or the branch and the docs'
+  default version imply different tracks (see "Track / channel scope").
+- Sources of truth contradict each other on any fact that reaches the
+  document — product name, version, revision, component list.
+- No save location can be established, or several candidate release-notes
+  folders exist (step 8.1.c).
+- The user's request contains a term, ref or scope you can read more than one
+  way — ask which reading is meant instead of choosing one.
 
-Batch unrelated small questions into one ask; never ask about anything you
-can resolve yourself from the repos.
+**How to ask.** Batch every open question into a single message; don't
+drip-feed. For each one: state what you already established, name the
+ambiguity, list the candidates and where you found them, and give your
+recommended answer so the user can simply confirm it. Prefer questions
+answerable in one word. Keep working on everything the question doesn't block
+while you wait, and never ask about anything you can resolve yourself from the
+repos.
+
+**What not to ask about.** Do not ask which repository, product, track or
+revision to generate for merely because the user didn't say — those are
+inferable from the open workspace (see "Starting from the currently open
+repository"): infer them, state what you inferred, and proceed. The exception
+is a bare request made while release-notes-builder itself is the open
+workspace, where there is no target repo to infer. The test is whether exactly
+one answer is *determinable*, not whether the user happened to supply it.
 
 ## Fully publishable output
 
@@ -754,8 +1072,8 @@ rather than leaving it as an aside — don't accumulate stale TODOs.
 
 1. Determine the save location:
    - **Cross-repo mode** (the currently open workspace is the target repo,
-     not release-notes-builder — the common case, see "Running this skill
-     from another repository" above): save into *that* repository, following
+     not release-notes-builder — the common case, see "Installing and running
+     this skill" above): save into *that* repository, following
      wherever its previous release notes already live — never into
      `$BUILDER_HOME/release-notes/`:
      a. If step 1 or step 2 already found the product's previously published
@@ -771,7 +1089,12 @@ rather than leaving it as an aside — don't accumulate stale TODOs.
         use whichever one contains existing revision/version-named files.
      c. If no existing release-notes location can be found in the repo, ask
         the user exactly where to save the file before writing anything —
-        do not guess or invent a path.
+        do not guess or invent a path. This is the normal case for a first
+        release (see "First release: a product with no release notes yet"):
+        propose the conventional path for the repo's existing docs layout
+        (e.g. `docs/reference/release-notes/revision-<N>.md` when the repo
+        already has a Diátaxis `docs/reference/` tree) and create the folder
+        only after the user confirms.
    - **Standalone mode** (release-notes-builder is itself the open
      workspace — see the note above the cross-repo options; no setup
      needed): keep the existing default,
@@ -830,6 +1153,26 @@ Verify the final document against the spec before saving:
 - [ ] If the input was a link to a previously published release-notes page,
       the generated document covers the *next* release after that page, not
       the release the page itself documents.
+- [ ] If the user named nothing at all, the repository, product, track,
+      branch and `from-ref` were inferred from the open workspace and its
+      newest release-notes file rather than asked about, and every inference
+      is stated in the review notes (see "Starting from the currently open
+      repository").
+- [ ] Nothing ambiguous, contradictory or undeterminable was silently guessed:
+      every such case was either resolved from a source of truth or put to the
+      user, and no `TODO` in the review notes stands in for a decision the user
+      could have settled (see "Infer what's determinable; ask about what
+      isn't").
+- [ ] If the user named a starting revision/version/tag/SHA, it was resolved
+      against the repo's actual tags, confirmed to be an ancestor of the
+      branch, and applied exclusively (the document covers the release *after*
+      it) — unless the user meant to document that release itself, which was
+      confirmed rather than assumed.
+- [ ] If this is the product's first release-notes document, that was verified
+      across the repo, the docs site and `$BUILDER_HOME/release-notes/` and
+      stated in the review notes; `base.md.j2` was used deliberately (not as a
+      silent fallback); and the starting point and save location were agreed
+      with the user.
 - [ ] Saved to the correct location for this invocation mode (see step 8):
       the target repo's existing release-notes folder — confirmed with the
       user if none was found — in cross-repo mode; `release-notes/` in
