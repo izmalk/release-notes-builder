@@ -221,7 +221,8 @@ SHA, so you can re-run with `--from-ref <that SHA>` and merge the results.
 
 ### Label → category mapping
 
-The changelog categories come from the [DA186 spec](https://docs.google.com/document/d/1hR7EOnw_FfP6PFXH4C2NfReZhMdWdBIto0C9MBcwYPs/edit?usp=sharing):
+The changelog categories come from the
+[DA186 spec](https://docs.google.com/document/d/1hR7EOnw_FfP6PFXH4C2NfReZhMdWdBIto0C9MBcwYPs/edit?usp=sharing):
 **Features**, **Breaking changes**, **Security**, **Bug fixes**, **Other
 improvements**. Each PR is assigned to exactly one of them based on its labels.
 
