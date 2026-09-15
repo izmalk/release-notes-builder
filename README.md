@@ -18,10 +18,9 @@ review". Steps 3–10 are performed by the agent skill; you only do 1 and 2.
 
 1. **You decide to release** a new charm revision (or a new product release).
 2. **You open the product's own repository** (e.g. `kafka-operator`) as your
-   workspace and make the skill reachable from it — via symlink, a copy, or by
-   pointing the agent at `SKILL.md` directly (see
-   [Running it from the repo you're releasing](#running-it-from-the-repo-youre-releasing-recommended-common-case)).
-   This is a one-time setup for options A/B; option C needs none.
+   workspace, having copied `SKILL.md` into your personal skills folder once
+   (see [Installation](#installation-copy-one-file)). No clone of this repo is
+   needed — the skill downloads the script and templates itself on first use.
 3. **You ask the agent for release notes**, identifying the release either by
    naming repositories and refs, or — most conveniently — by linking the
    **previously published** release-notes page. From that link the skill
@@ -81,64 +80,59 @@ Add `auto-sort on` (or `off`) to skip the question about reclassifying the
 
 > Create release notes for canonical/opensearch-operator with auto-sort on
 
-## Running it from the repo you're releasing (recommended, common case)
+## Installation: copy one file
 
-You normally don't need this repository open at all — the skill is meant to run
-with the **target product repo** open as your workspace. Pick whichever option
-suits your workflow; full details are in
-[`SKILL.md`](.github/skills/release-notes/SKILL.md#running-this-skill-from-another-repository-the-common-case).
+You normally don't need this repository at all — not cloned, not open. The skill
+is meant to run with the **target product repo** open as your workspace, and
+`SKILL.md` is **self-bootstrapping**: on first use it downloads the builder
+script and templates from this public repo into
+`~/.cache/release-notes-builder/`. So installing means copying a single file.
 
-| Option | Setup | Best for |
-| :--- | :--- | :--- |
-| **A. Personal skill via symlink** | One-time: symlink `.github/skills/release-notes/` into `~/.claude/skills/` (or your harness's personal-skills folder) | Repeat use across many product repos, no per-repo setup |
-| **B1. Copy the skill (lightweight)** | Copy `.github/skills/release-notes/` (instructions only) into the target repo at the same path | No personal-skill support, or you want it checked in for teammates, while the script and templates stay canonical here |
-| **B2. Copy the skill (self-contained)** | Also vendor `build_release_notes.py`, `requirements.txt`, and the needed template(s) into the copied skill folder | The target repo must have zero runtime dependency on another checkout (CI, air-gapped) — at the cost of script/template duplication |
-| **C. Zero setup** | None — tell the agent to follow the skill instructions at the absolute path to `SKILL.md` | A single one-off run, or trying the skill before installing it |
+```bash
+# Available in every workspace, no clone required:
+mkdir -p ~/.claude/skills/release-notes && curl -fsSL -o ~/.claude/skills/release-notes/SKILL.md \
+  https://raw.githubusercontent.com/izmalk/release-notes-builder/main/.github/skills/release-notes/SKILL.md
+```
 
-Opening `release-notes-builder` itself (**standalone mode**) also works and
-needs no setup at all; it just isn't a way of *reaching* another repository.
-`--repo` still accepts any `owner/repo`.
+Use `~/.copilot/skills/…` or `~/.agents/skills/…` instead if that's what your
+harness reads. To scope it to one repo rather than your whole machine, write it
+to `.github/skills/release-notes/SKILL.md` inside the target repo and commit it
+so teammates get it too.
 
-**Option A quick setup:**
+If your harness doesn't discover skills — or you just want one run — skip
+installation and name the file in your message:
+
+> Using the skill instructions at
+> `https://raw.githubusercontent.com/izmalk/release-notes-builder/main/.github/skills/release-notes/SKILL.md`,
+> generate release notes for canonical/kafka-operator
+
+Full details, including how `$BUILDER_HOME` is resolved, are in
+[`SKILL.md`](.github/skills/release-notes/SKILL.md#installing-and-running-this-skill).
+
+### Keeping it current
+
+The skill file and the cache are independent snapshots:
+
+- **Update `SKILL.md`** by re-running the `curl` above; it overwrites in place.
+- **Refresh the cached script and templates** by asking the agent for the latest
+  version, or by deleting `~/.cache/release-notes-builder/` so the next run
+  re-bootstraps.
+
+### Working on this repo instead
+
+If you're **developing** the skill rather than using it, clone this repo and
+either open it directly (**standalone mode** — zero setup, `--repo` still
+accepts any `owner/repo`), or symlink the skill folder so your edits take effect
+without re-copying:
+
 ```bash
 ln -s /absolute/path/to/release-notes-builder/.github/skills/release-notes \
     ~/.claude/skills/release-notes
 ```
-(or `~/.copilot/skills/release-notes`, `~/.agents/skills/release-notes` —
-whichever your harness reads). **Symlink, don't copy** — the skill finds the
-builder script and templates by following the symlink back here.
 
-**Option B1 quick setup:**
-```bash
-cp -r /absolute/path/to/release-notes-builder/.github/skills/release-notes \
-    /path/to/target-repo/.github/skills/release-notes
-```
-An instructions-only copy can't resolve back here on its own, so on first use
-the agent asks for this repo's path once and stores it in a `.builder-home`
-file next to the copied skill — or create it yourself:
-`echo /absolute/path/to/release-notes-builder > .github/skills/release-notes/.builder-home`.
-Commit `.builder-home` only if every teammate's checkout is at the same path;
-otherwise `.gitignore` it. Re-copy the folder whenever this repo's skill
-instructions change — copies don't auto-update.
-
-**Option B2 quick setup** (on top of B1's copy):
-```bash
-cp /absolute/path/to/release-notes-builder/build_release_notes.py \
-   /absolute/path/to/release-notes-builder/requirements.txt \
-   /path/to/target-repo/.github/skills/release-notes/
-cp -r /absolute/path/to/release-notes-builder/templates \
-   /path/to/target-repo/.github/skills/release-notes/templates
-```
-No `.builder-home` is needed — the skill finds the script next to itself. The
-trade-off: the generation logic and product template(s) are duplicated, won't
-receive upstream fixes, and can drift from the template shared by the product's
-other repos. Prefer B1 unless the target repo genuinely can't depend on
-anything outside itself.
-
-**Option C quick example** — with only the target repo open, ask:
-> Using the skill instructions at
-> `/home/you/release-notes-builder/.github/skills/release-notes/SKILL.md`,
-> generate release notes for canonical/kafka-operator
+A local checkout always wins over the bootstrap cache, so your uncommitted
+changes are what actually runs. The skill never overwrites a checkout when
+refreshing.
 
 ### Where the output goes
 
@@ -487,9 +481,15 @@ release-notes-builder/
 ├── spec/                           # DA186 / DA288 source documents
 ├── tests/
 │   └── test_autosort_rules.py      # Pins the auto-sort rule table
-├── .github/skills/release-notes/SKILL.md   # Agent skill (the workflow above)
+├── .github/skills/release-notes/SKILL.md   # Agent skill — the only file users install
 └── README.md                       # This file
 ```
+
+Only `SKILL.md` is distributed to users; it fetches `build_release_notes.py`,
+`templates/` and `requirements.txt` from this repo on demand into
+`~/.cache/release-notes-builder/`. Nothing here needs to be cloned to use the
+skill, and the cache lives outside every repository so it can never be committed
+by accident.
 
 ## License
 
