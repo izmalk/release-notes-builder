@@ -524,8 +524,14 @@ altering the facts**:
   flag them in the review notes.
 - **Categorisation**: entries with `fix:`/`Fix ...` in the message sitting
   outside "Bug fixes", or `feat:` outside "Features" — the builder maps PR
-  labels, which are often missing. Recategorise only when the message itself
-  is unambiguous (e.g. a `fix:` prefix). Otherwise leave and flag.
+  labels, which are often missing. It understands two label vocabularies at
+  once (see "Label → category mapping" in the README): the DA186 category
+  labels (`Features`, `Breaking changes`, `Security`, `Bug fixes`, `Other
+  improvements`) and the legacy ones (`bug`, `enhancement`, `not bug or
+  enhancement`, `breaking`), so a repo may mix both. Anything unlabelled
+  lands in "Other improvements", which is where most miscategorisation shows
+  up. Recategorise only when the message itself is unambiguous (e.g. a `fix:`
+  prefix). Otherwise leave and flag.
 - **False Jira IDs**: the builder script links any `[A-Z][A-Z0-9]+-\d+`
   pattern as a Jira ticket. It automatically excludes `CVE-*` (Common
   Vulnerabilities and Exposures IDs, e.g. `CVE-2026-1234` truncated to

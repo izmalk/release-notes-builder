@@ -19,16 +19,48 @@ import requests
 # ---------------------------------------------------------------------------
 # Label → category mapping (adjust as needed)
 # ---------------------------------------------------------------------------
-# Keys are GitHub PR label names (matched case-insensitively).
+# Keys are GitHub PR label names (matched case-insensitively, and with
+# separators normalised — see _normalise_label).
 # Values are the release-notes category the entry will appear under.
-LABEL_CATEGORY_MAP: dict[str, str] = {
+#
+# Two label vocabularies are supported out of the box and can be mixed freely
+# within the same release, because they do not conflict:
+#
+# 1. DA186 category labels — the label is simply the DA186 category name.
+#    Preferred for new repositories.
+# 2. Legacy labels — the ad-hoc labels Data charm repos use today. Kept as the
+#    default so existing repositories keep working unchanged.
+
+# 1. DA186 category labels (one per category in the DA186 spec).
+DA186_LABEL_CATEGORY_MAP: dict[str, str] = {
+    "features": "Features",
+    "feature": "Features",
+    "breaking changes": "Breaking changes",
+    "breaking change": "Breaking changes",
+    "security": "Security",
+    "bug fixes": "Bug fixes",
+    "bug fix": "Bug fixes",
+    "other improvements": "Other improvements",
+    "other improvement": "Other improvements",
+}
+
+# 2. Legacy labels currently in use across Data charm repositories.
+LEGACY_LABEL_CATEGORY_MAP: dict[str, str] = {
     "bug": "Bug fixes",
     "enhancement": "Features",
     "not bug or enhancement": "Other improvements",
-    # Uncomment the lines below when you start using these labels:
-    # "security": "Security",
-    # "breaking": "Breaking changes",
+    "breaking": "Breaking changes",
 }
+
+# Effective mapping: both vocabularies at once. Add repo-specific labels here.
+LABEL_CATEGORY_MAP: dict[str, str] = {
+    **DA186_LABEL_CATEGORY_MAP,
+    **LEGACY_LABEL_CATEGORY_MAP,
+}
+
+# Label prefixes stripped before matching, so that `type: bug fixes`,
+# `category/security` and similar conventions resolve to the same category.
+LABEL_PREFIXES: tuple[str, ...] = ("type", "category", "kind", "release notes")
 
 # Where PRs with *no* matching label end up (kitchen-sink catch-all).
 DEFAULT_CATEGORY: str = "Other improvements"
@@ -39,6 +71,18 @@ CATEGORY_ORDER: list[str] = [
     "Features",
     "Breaking changes",
     "Security",
+    "Bug fixes",
+    "Other improvements",
+]
+
+# Resolution order when a single PR carries labels for several categories
+# (e.g. both `security` and `bug`). The first match in this list wins, so the
+# most newsworthy category is used and "Other improvements" is only ever a
+# last resort.
+CATEGORY_PRIORITY: list[str] = [
+    "Breaking changes",
+    "Security",
+    "Features",
     "Bug fixes",
     "Other improvements",
 ]
@@ -180,12 +224,44 @@ def _label_names(pr: dict) -> list[str]:
     return [lbl["name"].lower() for lbl in pr.get("labels", [])]
 
 
+def _normalise_label(label: str) -> str:
+    """Normalise a label name for matching against LABEL_CATEGORY_MAP.
+
+    Lowercases, drops a leading grouping prefix (see LABEL_PREFIXES) separated
+    by `:` or `/`, then turns `-` and `_` into spaces and collapses whitespace.
+    This way `Bug fixes`, `bug-fixes`, `type: bug_fixes` and `category/bug
+    fixes` all resolve to the same category.
+    """
+    normalised = label.lower().strip()
+
+    for separator in (":", "/"):
+        prefix, found, remainder = normalised.partition(separator)
+        if found and prefix.strip() in LABEL_PREFIXES:
+            normalised = remainder.strip()
+            break
+
+    normalised = re.sub(r"[-_]+", " ", normalised)
+    return re.sub(r"\s+", " ", normalised).strip()
+
+
 def categorise_entry(labels: list[str]) -> str:
-    """Map a list of lowercased PR labels to a release-notes category."""
-    for label in labels:
-        for config_label, category in LABEL_CATEGORY_MAP.items():
-            if label == config_label.lower():
-                return category
+    """Map a list of PR labels to a single release-notes category.
+
+    Both the DA186 category labels and the legacy labels are recognised, and a
+    PR may carry either kind. When labels from several categories are present,
+    CATEGORY_PRIORITY decides the winner; PRs with no recognised label fall
+    back to DEFAULT_CATEGORY.
+    """
+    matched = {
+        LABEL_CATEGORY_MAP[normalised]
+        for normalised in (_normalise_label(label) for label in labels)
+        if normalised in LABEL_CATEGORY_MAP
+    }
+
+    for category in CATEGORY_PRIORITY:
+        if category in matched:
+            return category
+
     return DEFAULT_CATEGORY
 
 

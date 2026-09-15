@@ -221,23 +221,61 @@ SHA, so you can re-run with `--from-ref <that SHA>` and merge the results.
 
 ### Label → category mapping
 
-At the top of `build_release_notes.py`:
+The changelog categories come from the [DA186 spec](https://docs.google.com/document/d/1hR7EOnw_FfP6PFXH4C2NfReZhMdWdBIto0C9MBcwYPs/edit?usp=sharing):
+**Features**, **Breaking changes**, **Security**, **Bug fixes**, **Other
+improvements**. Each PR is assigned to exactly one of them based on its labels.
+
+Two label vocabularies are supported out of the box, defined at the top of
+`build_release_notes.py`. They do not conflict, so a repository can use either
+one, or **mix both** — even within the same release.
+
+**DA186 category labels** (recommended for new repos — the label *is* the
+category name):
+
+| PR label | Category |
+| :--- | :--- |
+| `Features` / `Feature` | Features |
+| `Breaking changes` / `Breaking change` | Breaking changes |
+| `Security` | Security |
+| `Bug fixes` / `Bug fix` | Bug fixes |
+| `Other improvements` / `Other improvement` | Other improvements |
+
+**Legacy labels** (what Data charm repos use today — still supported, no
+migration needed):
+
+| PR label | Category |
+| :--- | :--- |
+| `bug` | Bug fixes |
+| `enhancement` | Features |
+| `not bug or enhancement` | Other improvements |
+| `breaking` | Breaking changes |
+
+Matching rules:
+
+- **Case-insensitive**, and `-`, `_` are treated as spaces (`bug-fixes` ==
+  `Bug fixes`).
+- A grouping prefix of `type`, `category`, `kind` or `release notes`, separated
+  by `:` or `/`, is stripped before matching — so `type: bug fixes` and
+  `category/security` work too.
+- If a PR carries labels from **several** categories, `CATEGORY_PRIORITY`
+  decides the winner: Breaking changes → Security → Features → Bug fixes →
+  Other improvements. So a PR labelled both `bug` and `Security` lands under
+  Security.
+- PRs with **no recognised label** (or no PR at all) land in `DEFAULT_CATEGORY`
+  (`Other improvements`). The agent skill re-checks these against the commit
+  message during the polish pass.
+
+Categories render in `CATEGORY_ORDER`; empty ones are omitted, per DA186.
+
+To add repo-specific labels, extend `LABEL_CATEGORY_MAP`:
 
 ```python
 LABEL_CATEGORY_MAP = {
-    "bug": "Bug fixes",
-    "enhancement": "Features",
-    "not bug or enhancement": "Other improvements",
-    # "security": "Security",
-    # "breaking": "Breaking changes",
+    **DA186_LABEL_CATEGORY_MAP,
+    **LEGACY_LABEL_CATEGORY_MAP,
+    "cve": "Security",          # your own additions
 }
-
-DEFAULT_CATEGORY = "Other improvements"   # catch-all for unlabelled PRs
 ```
-
-Labels are matched **case-insensitively**. PRs whose labels don't match any key
-land in `DEFAULT_CATEGORY`. Categories render in `CATEGORY_ORDER`; empty ones are
-omitted.
 
 ## Templates
 
