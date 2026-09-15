@@ -7,6 +7,10 @@
 
    Differences from base.md.j2 (all deliberate, to match the published docs):
      * MyST frontmatter with an html_meta description and a MyST anchor.
+       The frontmatter must end up on line 1 of the saved file: if a
+       review-notes HTML comment is added, it goes AFTER the frontmatter
+       block. Otherwise Sphinx parses the `---` fences as body transitions and
+       warns "Document headings start at H2, not H1".
      * Title is "Charmed Apache Spark (revision N)"; the date is a plain line
        (e.g. "July 29th, 2026"), not bold.
      * Links line is "Charmhub: <channel> | Docs | Deploy guide |

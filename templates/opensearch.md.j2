@@ -9,6 +9,10 @@
    Differences from base.md.j2, and why:
    - MyST frontmatter with `html_meta.description` and a
      `(reference-release-notes-revision-N)=` anchor, as the docs build requires.
+     The frontmatter must end up on line 1 of the saved file: if a review-notes
+     HTML comment is added, it goes AFTER the frontmatter block. Otherwise
+     Sphinx parses the `---` fences as body transitions and warns
+     "Document headings start at H2, not H1".
    - Title is `# Revision N` (the docs site supplies the product name), and the
      date line is plain text ("December 16, 2025"), not bold as in the base.
    - Intro links use Diataxis cross-references (`how-to-deploy-standard`,

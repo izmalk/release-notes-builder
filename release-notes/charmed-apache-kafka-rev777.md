@@ -1,3 +1,8 @@
+---
+myst:
+  html_meta:
+    description: "Charmed Apache Kafka revision 777 release notes - Apache Kafka 4.3.0, OpenTelemetry tracing, monorepo consolidation, Kafka UI high availability and identity integration."
+---
 <!--
 REVIEW NOTES — delete this whole comment before publishing.
 
@@ -79,12 +84,12 @@ TODOs — act on each before publishing:
      issues.apache.org if you want it referenced.
    - A stray leading `;` was removed from #577's title.
 7. Verify all artefacts and links resolve before publishing.
+8. Run the repo's docs checks against this page before publishing:
+   `cd docs && make spelling` then `cd docs && make linkcheck` (the latter
+   takes a few minutes). Fix typos in PR titles in place, wrap bare filenames
+   in backticks so MyST doesn't linkify them, and only add genuinely
+   uncheckable URLs to `linkcheck_ignore` in `docs/conf.py`.
 -->
----
-myst:
-  html_meta:
-    description: "Charmed Apache Kafka revision 777 release notes - Apache Kafka 4.3.0, OpenTelemetry tracing, monorepo consolidation, Kafka UI high availability and identity integration."
----
 
 (reference-release-notes-revision-777)=
 # Revision 777

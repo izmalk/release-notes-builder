@@ -3,7 +3,13 @@
    the blocks marked "TODO" below.
 
    Overridable blocks:
-     frontmatter   - anything above the title (e.g. MyST html_meta)
+     frontmatter   - anything above the title (e.g. MyST html_meta).
+                     MUST render at the very start of the file: Sphinx/MyST
+                     only recognises frontmatter on line 1. If the agent adds
+                     a review-notes HTML comment, it goes AFTER this block,
+                     never before it — otherwise the `---` fences are parsed
+                     as body transitions and the build warns
+                     "Document headings start at H2, not H1".
      title         - release heading
      date_line     - date line below the title
      introduction  - intro paragraph (wraps intro_links)

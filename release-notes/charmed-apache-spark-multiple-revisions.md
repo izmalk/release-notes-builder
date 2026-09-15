@@ -1,3 +1,8 @@
+---
+myst:
+  html_meta:
+    description: "Charmed Apache Spark release notes - Apache Spark 4.0 track support, Apache Kyuubi updates, security-maintained OCI image refreshes and dependency hardening across the 3.4, 3.5 and 4.0 tracks."
+---
 <!--
 REVIEW NOTES (for the release owner — remove before publishing)
 
@@ -41,6 +46,14 @@ TODOs for the release owner:
    still accurate for this release; update them if they changed.
 4. Publish or link a product-wide upgrade guide; until one exists, keep
    pointing at Kyuubi's upgrade instructions page.
+5. Replace TODO in the MyST anchor below with the revision number this
+   document is published as, so the anchor matches the docs' convention
+   (`(reference-releases-revision-N)=`).
+6. Run the repo's docs checks before publishing: `cd docs && make spelling`
+   then `cd docs && make linkcheck` (the latter takes a few minutes). Fix
+   PR-title typos in place, wrap bare filenames in backticks so MyST doesn't
+   linkify them, and check the `[redirected ...]` lines in
+   `docs/_build/output.txt` as well as the exit code.
 
 Flagged entries:
 - The S3-region docs fix (PRA-165) appears in the Integration Hub, History
@@ -59,7 +72,7 @@ Flagged entries:
 - Duplicate commits from repeated Renovate re-runs (rock PR #262 x3, PR #275
   x2, PR #276 x2) were collapsed to single entries.
 - Backports of the same change across the 3.4/3.5/4.0 tracks (CODEOWNERS,
-  SECURITY.md, Renovate migration, trivy rework, TIOBE workflow, dependency
+  `SECURITY.md`, Renovate migration, trivy rework, TIOBE workflow, dependency
   minimum age) are listed once per component with all track PR links.
 - spark-integration-hub-k8s-operator 4/edge has no commits after rev126 (the
   4.0 release ships the hub from 3/stable per the rev7 compatibility table),
@@ -68,6 +81,7 @@ Flagged entries:
   the track branches.
 -->
 
+(reference-releases-revision-TODO)=
 # Charmed Apache Spark
 
 Aug 31st, 2026
@@ -107,8 +121,8 @@ since v1.4.0:
 
 * [[PRA-353](https://warthogs.atlassian.net/browse/PRA-353)] Add dependency minimum age release ([PR #203](https://github.com/canonical/spark-k8s-toolkit-py/pull/203)) ([f978d39](https://github.com/canonical/spark-k8s-toolkit-py/commit/f978d397c3f6e76815c46f678806f4b260615c45))
 * [[PRA-354](https://warthogs.atlassian.net/browse/PRA-354)] Prettify and improve renovate configuration ([PR #204](https://github.com/canonical/spark-k8s-toolkit-py/pull/204)) ([4193fd7](https://github.com/canonical/spark-k8s-toolkit-py/commit/4193fd7c50fdb445e68936376177ebbf8c03c47a))
-* [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add SECURITY.md ([PR #218](https://github.com/canonical/spark-k8s-toolkit-py/pull/218)) ([277138a](https://github.com/canonical/spark-k8s-toolkit-py/commit/277138a54f60661eb6f2019b6c29187a1c8e9070))
-* [[PRA-379](https://warthogs.atlassian.net/browse/PRA-379)] Add tiobe_scan.yaml workflow ([PR #217](https://github.com/canonical/spark-k8s-toolkit-py/pull/217)) ([00580c1](https://github.com/canonical/spark-k8s-toolkit-py/commit/00580c103f2c101182032ea94ba20fa8fcec00a7))
+* [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add `SECURITY.md` ([PR #218](https://github.com/canonical/spark-k8s-toolkit-py/pull/218)) ([277138a](https://github.com/canonical/spark-k8s-toolkit-py/commit/277138a54f60661eb6f2019b6c29187a1c8e9070))
+* [[PRA-379](https://warthogs.atlassian.net/browse/PRA-379)] Add `tiobe_scan.yaml` workflow ([PR #217](https://github.com/canonical/spark-k8s-toolkit-py/pull/217)) ([00580c1](https://github.com/canonical/spark-k8s-toolkit-py/commit/00580c103f2c101182032ea94ba20fa8fcec00a7))
 * Bump lightkube to v1 ([PR #219](https://github.com/canonical/spark-k8s-toolkit-py/pull/219)) ([70382cd](https://github.com/canonical/spark-k8s-toolkit-py/commit/70382cd3f14b94550d091f15bed5e7cfb266a1bf))
 * Bump version to 1.4.1 ([PR #220](https://github.com/canonical/spark-k8s-toolkit-py/pull/220)) ([947fcd1](https://github.com/canonical/spark-k8s-toolkit-py/commit/947fcd1f7cf3aa62bbdd087889ca597131abc3c9))
 * Fix GH release job permission ([PR #221](https://github.com/canonical/spark-k8s-toolkit-py/pull/221)) ([e0533bd](https://github.com/canonical/spark-k8s-toolkit-py/commit/e0533bd49b1b66ec07882248ff9bef388c80f024))
@@ -130,9 +144,9 @@ across the 3.4, 3.5 and 4.0 tracks:
 #### Other improvements
 
 * [[PRA-331](https://warthogs.atlassian.net/browse/PRA-331)] Add .trivyignore ([PR #252](https://github.com/canonical/charmed-spark-rock/pull/252) 3.4/edge, [PR #253](https://github.com/canonical/charmed-spark-rock/pull/253) 3.5/edge, [PR #254](https://github.com/canonical/charmed-spark-rock/pull/254) 4.0/edge)
-* [[PRA-355](https://warthogs.atlassian.net/browse/PRA-355)] Rework trivy workflow ([PR #258](https://github.com/canonical/charmed-spark-rock/pull/258) 3.4/edge, [PR #259](https://github.com/canonical/charmed-spark-rock/pull/259) 3.5/edge, [PR #260](https://github.com/canonical/charmed-spark-rock/pull/260) 4.0/edge); fix trivy.yaml permissions ([PR #263](https://github.com/canonical/charmed-spark-rock/pull/263) 3.4/edge)
+* [[PRA-355](https://warthogs.atlassian.net/browse/PRA-355)] Rework trivy workflow ([PR #258](https://github.com/canonical/charmed-spark-rock/pull/258) 3.4/edge, [PR #259](https://github.com/canonical/charmed-spark-rock/pull/259) 3.5/edge, [PR #260](https://github.com/canonical/charmed-spark-rock/pull/260) 4.0/edge); fix `trivy.yaml` permissions ([PR #263](https://github.com/canonical/charmed-spark-rock/pull/263) 3.4/edge)
 * [[PRA-354](https://warthogs.atlassian.net/browse/PRA-354)] Migrate Renovate configuration to the release branches ([PR #267](https://github.com/canonical/charmed-spark-rock/pull/267) 3.4/edge, [PR #261](https://github.com/canonical/charmed-spark-rock/pull/261) 3.5/edge, [PR #265](https://github.com/canonical/charmed-spark-rock/pull/265) 4.0/edge); enable Renovate on 4.0/edge ([PR #264](https://github.com/canonical/charmed-spark-rock/pull/264))
-* [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add SECURITY.md ([PR #275](https://github.com/canonical/charmed-spark-rock/pull/275) 3.4/edge, [PR #276](https://github.com/canonical/charmed-spark-rock/pull/276) 3.5/edge, [PR #277](https://github.com/canonical/charmed-spark-rock/pull/277) 4.0/edge)
+* [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add `SECURITY.md` ([PR #275](https://github.com/canonical/charmed-spark-rock/pull/275) 3.4/edge, [PR #276](https://github.com/canonical/charmed-spark-rock/pull/276) 3.5/edge, [PR #277](https://github.com/canonical/charmed-spark-rock/pull/277) 4.0/edge)
 * chore: adding CODEOWNERS file ([PR #256](https://github.com/canonical/charmed-spark-rock/pull/256) 3.4/edge, [PR #255](https://github.com/canonical/charmed-spark-rock/pull/255) 3.5/edge, [PR #257](https://github.com/canonical/charmed-spark-rock/pull/257) 4.0/edge)
 * Update GitHub actions ([PR #269](https://github.com/canonical/charmed-spark-rock/pull/269) 3.4/edge, [PR #272](https://github.com/canonical/charmed-spark-rock/pull/272) 3.5/edge, [PR #274](https://github.com/canonical/charmed-spark-rock/pull/274) 4.0/edge)
 * Pin dependencies ([PR #268](https://github.com/canonical/charmed-spark-rock/pull/268) 3.4/edge, [PR #270](https://github.com/canonical/charmed-spark-rock/pull/270) 3.5/edge, [PR #273](https://github.com/canonical/charmed-spark-rock/pull/273) 4.0/edge)
@@ -144,7 +158,7 @@ and 4.0 tracks:
 
 #### Other improvements
 
-* [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add SECURITY.md ([PR #205](https://github.com/canonical/spark-client-snap/pull/205) 3.4/edge, [PR #204](https://github.com/canonical/spark-client-snap/pull/204) 3.5/edge, [PR #206](https://github.com/canonical/spark-client-snap/pull/206) 4.0/edge)
+* [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add `SECURITY.md` ([PR #205](https://github.com/canonical/spark-client-snap/pull/205) 3.4/edge, [PR #204](https://github.com/canonical/spark-client-snap/pull/204) 3.5/edge, [PR #206](https://github.com/canonical/spark-client-snap/pull/206) 4.0/edge)
 * [[PRA-354](https://warthogs.atlassian.net/browse/PRA-354)] Migrate and improve renovate config ([PR #191](https://github.com/canonical/spark-client-snap/pull/191) 3.4/edge, [PR #190](https://github.com/canonical/spark-client-snap/pull/190) 3.5/edge, [PR #192](https://github.com/canonical/spark-client-snap/pull/192) 4.0/edge)
 * chore: adding CODEOWNERS file ([PR #187](https://github.com/canonical/spark-client-snap/pull/187) 3.4/edge, [PR #186](https://github.com/canonical/spark-client-snap/pull/186) 3.5/edge, [PR #188](https://github.com/canonical/spark-client-snap/pull/188) 4.0/edge)
 * [[DPE-9830](https://warthogs.atlassian.net/browse/DPE-9830)] [[DPE-9769](https://warthogs.atlassian.net/browse/DPE-9769)] Update GitHub actions ([PR #180](https://github.com/canonical/spark-client-snap/pull/180), [PR #200](https://github.com/canonical/spark-client-snap/pull/200) 3.4/edge; [PR #183](https://github.com/canonical/spark-client-snap/pull/183), [PR #202](https://github.com/canonical/spark-client-snap/pull/202) 3.5/edge; [PR #185](https://github.com/canonical/spark-client-snap/pull/185), [PR #203](https://github.com/canonical/spark-client-snap/pull/203) 4.0/edge)
@@ -220,10 +234,10 @@ Changes to the Charmed Apache Kyuubi charm (`kyuubi-k8s-operator`) across the
 
 * [[PRA-353](https://warthogs.atlassian.net/browse/PRA-353)] Add dependency minimum release age and update charmlibs ([PR #282](https://github.com/canonical/kyuubi-k8s-operator/pull/282) 3.5/edge, [PR #283](https://github.com/canonical/kyuubi-k8s-operator/pull/283) 3.4/edge, [PR #284](https://github.com/canonical/kyuubi-k8s-operator/pull/284) 4.0/edge)
 * [[PRA-354](https://warthogs.atlassian.net/browse/PRA-354)] Migrate and improve renovate config ([PR #285](https://github.com/canonical/kyuubi-k8s-operator/pull/285) 3.5/edge, [PR #287](https://github.com/canonical/kyuubi-k8s-operator/pull/287) 3.4/edge, [PR #286](https://github.com/canonical/kyuubi-k8s-operator/pull/286) 4.0/edge)
-* [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add SECURITY.md ([PR #317](https://github.com/canonical/kyuubi-k8s-operator/pull/317) 3.5/edge, [PR #316](https://github.com/canonical/kyuubi-k8s-operator/pull/316) 3.4/edge, [PR #318](https://github.com/canonical/kyuubi-k8s-operator/pull/318) 4.0/edge)
+* [[PRA-377](https://warthogs.atlassian.net/browse/PRA-377)] Add `SECURITY.md` ([PR #317](https://github.com/canonical/kyuubi-k8s-operator/pull/317) 3.5/edge, [PR #316](https://github.com/canonical/kyuubi-k8s-operator/pull/316) 3.4/edge, [PR #318](https://github.com/canonical/kyuubi-k8s-operator/pull/318) 4.0/edge)
 * chore: adding CODEOWNERS file ([PR #278](https://github.com/canonical/kyuubi-k8s-operator/pull/278) 3.5/edge, [PR #279](https://github.com/canonical/kyuubi-k8s-operator/pull/279) 3.4/edge, [PR #280](https://github.com/canonical/kyuubi-k8s-operator/pull/280) 4.0/edge)
 * Update OCI resources ([PR #263](https://github.com/canonical/kyuubi-k8s-operator/pull/263) 3.5/edge, [PR #256](https://github.com/canonical/kyuubi-k8s-operator/pull/256) 3.4/edge, [PR #270](https://github.com/canonical/kyuubi-k8s-operator/pull/270) 4.0/edge)
-* Update charmcraft.yaml build tools ([PR #264](https://github.com/canonical/kyuubi-k8s-operator/pull/264) 3.5/edge, [PR #257](https://github.com/canonical/kyuubi-k8s-operator/pull/257) 3.4/edge, [PR #271](https://github.com/canonical/kyuubi-k8s-operator/pull/271) 4.0/edge)
+* Update `charmcraft.yaml` build tools ([PR #264](https://github.com/canonical/kyuubi-k8s-operator/pull/264) 3.5/edge, [PR #257](https://github.com/canonical/kyuubi-k8s-operator/pull/257) 3.4/edge, [PR #271](https://github.com/canonical/kyuubi-k8s-operator/pull/271) 4.0/edge)
 * Update GitHub actions ([PR #268](https://github.com/canonical/kyuubi-k8s-operator/pull/268) 3.5/edge, [PR #261](https://github.com/canonical/kyuubi-k8s-operator/pull/261) 3.4/edge, [PR #276](https://github.com/canonical/kyuubi-k8s-operator/pull/276), [PR #272](https://github.com/canonical/kyuubi-k8s-operator/pull/272) 4.0/edge)
 * Update aws-actions/configure-aws-credentials action to v6.2.2 ([PR #266](https://github.com/canonical/kyuubi-k8s-operator/pull/266) 3.5/edge, [PR #259](https://github.com/canonical/kyuubi-k8s-operator/pull/259) 3.4/edge)
 * Update dependency mypy to v2 ([PR #267](https://github.com/canonical/kyuubi-k8s-operator/pull/267) 3.5/edge, [PR #260](https://github.com/canonical/kyuubi-k8s-operator/pull/260) 3.4/edge, [PR #274](https://github.com/canonical/kyuubi-k8s-operator/pull/274) 4.0/edge)
@@ -242,7 +256,7 @@ Changes to the Terraform module (`spark-k8s-bundle`) across the 3.4, 3.5 and
 * Fix the release section ([PR #315](https://github.com/canonical/spark-k8s-bundle/pull/315) track/3.5, [PR #313](https://github.com/canonical/spark-k8s-bundle/pull/313) track/3.4, [PR #314](https://github.com/canonical/spark-k8s-bundle/pull/314) track/4.0)
 * [[PRA-354](https://warthogs.atlassian.net/browse/PRA-354)] Migrate and improve renovate config ([PR #316](https://github.com/canonical/spark-k8s-bundle/pull/316) track/3.5, [PR #317](https://github.com/canonical/spark-k8s-bundle/pull/317) track/3.4, [PR #318](https://github.com/canonical/spark-k8s-bundle/pull/318) track/4.0)
 * [[PRA-354](https://warthogs.atlassian.net/browse/PRA-354)] Regroup python deps PRs in renovate config ([PR #346](https://github.com/canonical/spark-k8s-bundle/pull/346) track/3.5, [PR #349](https://github.com/canonical/spark-k8s-bundle/pull/349) track/3.4, [PR #350](https://github.com/canonical/spark-k8s-bundle/pull/350) track/4.0)
-* [[PRA-379](https://warthogs.atlassian.net/browse/PRA-379)] Add tiobe_scan.yaml workflow ([PR #352](https://github.com/canonical/spark-k8s-bundle/pull/352) track/3.5, [PR #353](https://github.com/canonical/spark-k8s-bundle/pull/353) track/3.4, [PR #354](https://github.com/canonical/spark-k8s-bundle/pull/354) track/4.0)
+* [[PRA-379](https://warthogs.atlassian.net/browse/PRA-379)] Add `tiobe_scan.yaml` workflow ([PR #352](https://github.com/canonical/spark-k8s-bundle/pull/352) track/3.5, [PR #353](https://github.com/canonical/spark-k8s-bundle/pull/353) track/3.4, [PR #354](https://github.com/canonical/spark-k8s-bundle/pull/354) track/4.0)
 
 ## Compatibility
 

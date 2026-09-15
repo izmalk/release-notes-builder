@@ -116,20 +116,30 @@ containing `build_release_notes.py`:
    writes it any more.
 4. **The bootstrap cache**, `~/.cache/release-notes-builder/`. If it already
    contains `build_release_notes.py`, use it as-is.
-5. **Bootstrap it.** Download the script and templates from the public
+5. **Bootstrap it.** Download the script, templates and tools from the public
    repository into the cache, then use that:
    ```bash
    BUILDER_HOME="${XDG_CACHE_HOME:-$HOME/.cache}/release-notes-builder"
    mkdir -p "$BUILDER_HOME"
    curl -fsSL https://codeload.github.com/izmalk/release-notes-builder/tar.gz/refs/heads/main \
      | tar -xz -C "$BUILDER_HOME" --strip-components=1 --wildcards \
-         '*/build_release_notes.py' '*/templates/*' '*/requirements.txt'
+         '*/build_release_notes.py' '*/templates/*' '*/tools/*' '*/requirements.txt'
    ```
    One request, ~80 KB, no authentication and no `git` needed (the repository
    is public). Tell the user this happened and where the cache is.
 
-Then make sure the script's dependencies are importable — it needs `jinja2`
-and `requests`. Try running it; if it fails on a missing import, install them
+   `'*/tools/*'` matters: without it, step 9's `tools/check_autolinks.py` is
+   missing and the auto-link check silently can't run. Note that `tar` exits
+   **2** with `*/tools/*: Not found in archive` if the pushed branch predates
+   that directory, *even though the other files extracted correctly*. Don't
+   treat that non-zero exit as a failed bootstrap: check which files actually
+   landed, and if `tools/check_autolinks.py` is genuinely absent from the
+   remote, say so and fall back to reviewing bare filenames by hand (see step
+   9) instead of skipping the check silently.
+
+Then make sure the dependencies are importable — `build_release_notes.py` needs
+`jinja2` and `requests`, and `tools/check_autolinks.py` needs `linkify-it-py`.
+Try running them; if either fails on a missing import, install them
 (`pip install -r "$BUILDER_HOME/requirements.txt"`, or into a virtualenv if
 the environment is externally managed) rather than reporting failure.
 
@@ -137,7 +147,8 @@ the environment is externally managed) rather than reporting failure.
 pick up fixes by itself. Re-run the bootstrap command (it overwrites in place)
 when the user asks for the latest version, or if the cache looks stale — for
 example when a template the skill expects, such as
-`templates/opensearch.md.j2`, is missing. Never refresh a `$BUILDER_HOME` that
+`templates/opensearch.md.j2`, or a tool such as `tools/check_autolinks.py`, is
+missing. Never refresh a `$BUILDER_HOME` that
 came from source 1: that is the user's own checkout, possibly with uncommitted
 work, and overwriting it would destroy their edits.
 
@@ -923,6 +934,19 @@ altering the facts**:
   trivial docs/CI entries; never delete a change outright.
 - **Formatting**: broken Markdown links, stray `\[[` escapes, empty
   parentheses, trailing whitespace, entries missing PR links.
+- **Code-like tokens**: wrap filenames, modules, CLI flags and config keys
+  that appear in PR titles in backticks — `` `charm.py` ``,
+  `` `metadata.yaml` ``, `` `README.md` ``, `` `test_charm.py` ``. Doing this
+  here saves two classes of failure in step 9: the spellchecker flags them as
+  misspelled words, and MyST's linkify turns anything shaped like a domain
+  into a link, so a bare `charm.py` becomes a broken `http://charm.py` — and a
+  bare `README.md` becomes `http://README.md`, which *resolves*, to a domain
+  squatter. Don't hunt for these by eye: step 9 runs
+  `tools/check_autolinks.py`, which decides using the same library MyST uses.
+- **Typos in PR titles**: PR titles are copied verbatim, so their authors'
+  misspellings come along. Correct them (`acomodating` →
+  `accommodating`). A spelling correction doesn't change what the entry
+  says, so it isn't covered by the "never rewrite a message" rule below.
 - **Facts**: never rewrite a message to say something different, never
   invent Jira IDs, PR numbers, versions, or dates.
 
@@ -1046,11 +1070,41 @@ notes** — not a draft, not a work in progress:
   8)` with the real/expected revision, not `(upcoming stable release —
   draft)`).
 - It is fine, and expected, to leave an invisible HTML comment block
-  (`<!-- ... -->`) at the top with review notes, source-of-truth
-  references, and imperative TODOs for the release owner (see below) — that
-  comment is the *only* place allowed to acknowledge open items.
+  (`<!-- ... -->`) with review notes, source-of-truth references, and
+  imperative TODOs for the release owner (see below) — that comment is the
+  *only* place allowed to acknowledge open items. It goes **immediately
+  after the frontmatter**, never above it (see "Frontmatter must be the very
+  first thing in the file").
 - Every visible heading and section must be complete prose, not a stub —
   no bracketed placeholders in the rendered text.
+
+### Frontmatter must be the very first thing in the file
+
+If the product's template emits frontmatter (MyST `html_meta`, or YAML for
+another docs stack), the opening `---` must be on **line 1, column 1**, with
+nothing at all before it — no HTML comment, no blank line, no anchor.
+
+This is not a style preference. Sphinx/MyST only recognises frontmatter at the
+very start of the document. Anything before it means the `---` block is parsed
+as body content instead: the `---` lines become transitions, the `# Revision N`
+title stops being the document title, and the docs build fails with
+
+```
+WARNING: Document headings start at H2, not H1
+```
+
+The correct order at the top of the saved file is therefore:
+
+1. The frontmatter block (`---` … `---`), starting on line 1.
+2. The review-notes HTML comment (`<!-- ... -->`).
+3. The MyST anchor (e.g. `(reference-release-notes-revision-316)=`).
+4. The `# <title>` heading.
+
+Because the review-notes comment is written by the agent (not the template),
+it is the agent's job to insert it *after* the rendered frontmatter rather
+than prepending it to the file. Verify this on the saved file before
+presenting it: `head -1 <file>` must print `---` whenever the template has a
+frontmatter block.
 
 ### Review-notes TODOs must be imperative and actionable
 
@@ -1108,6 +1162,257 @@ rather than leaving it as an aside — don't accumulate stale TODOs.
    - Categories with notable highlights.
    - Any TODOs left in the review-notes comment for the user (compat values,
      links, flagged entries) — phrased imperatively, per the rule above.
+
+### 9. Verify with the repo's own docs checks
+
+The generated document is not finished until the target repository's own docs
+checks pass on it. Release notes are the single most check-hostile page in a
+charm's docs: they are full of raw PR titles written by developers, which
+routinely contain misspellings, tool jargon and bare filenames that the docs
+build treats as prose. Run the checks and fix what they report — do not hand
+the user a document that will fail CI.
+
+This step applies in **cross-repo mode** only (the target repo is the open
+workspace, so its `docs/` tree and its checks are available). In standalone
+mode there is no docs build to run against; say so and skip it.
+
+**Warn the user before starting, and say why it takes a while.** `make
+linkcheck` issues a real network request for every external link in the whole
+docs set and commonly takes **several minutes**; a release-notes page adds one
+request per PR link, so a 60-entry document makes this noticeably slower. Tell
+the user, up front, something like:
+
+> Now running the repo's docs checks against the new page: `make spelling`
+> (fast) and `make linkcheck` (this hits every external link in the docs and
+> usually takes a few minutes). I'll fix whatever they report and re-run until
+> both pass.
+
+Then loop until clean:
+
+1. **Find the docs directory and its check targets.** Conventionally
+   `docs/Makefile` with `spelling` (alias `spellcheck`) and `linkcheck`
+   targets, run from inside `docs/`. Confirm the targets exist
+   (`grep -E '^(spelling|spellcheck|linkcheck):' docs/Makefile`) rather than
+   assuming; if the repo has no such targets, say so and skip this step.
+2. **Run the auto-link checker first** — it is instant, needs no network, and
+   catches the one class of failure that a green linkcheck will not
+   (see "Domain squatting via auto-linked filenames" below):
+
+   ```bash
+   python "$BUILDER_HOME/tools/check_autolinks.py" <saved-file>
+   ```
+
+3. **Run the spellcheck next** — it is much faster than linkcheck, so fix its
+   findings before spending minutes on the network checks:
+
+   ```bash
+   cd docs && make spelling
+   ```
+
+   Many Canonical docs Makefiles accept `CHECK_PATH=` to narrow the run, which
+   is far quicker while iterating:
+
+   ```bash
+   cd docs && make spelling CHECK_PATH=reference/release-notes
+   ```
+
+   Always finish with a full, unnarrowed run before declaring success.
+4. **Fix each spelling finding** — see "Fixing spellcheck findings" below.
+5. **Re-run the spellcheck** until it reports nothing for the new page.
+6. **Run the linkcheck** (re-state that this is the slow one):
+
+   ```bash
+   cd docs && make linkcheck
+   ```
+
+7. **Fix each broken link** — see "Fixing linkcheck findings" below. A zero
+   exit code does not mean the page is clean: also audit the `[redirected ...]`
+   lines in the build's link report, because a linkified filename that happens
+   to resolve passes the check while publishing a link to a squatted domain.
+   See "A clean exit code is not enough" below.
+8. **Re-run all three checks** after any fix, and keep looping until they are
+   green *for your page*. A spelling fix can introduce a link finding and vice
+   versa (e.g. replacing a bare filename with a code span, or a word with a
+   link), so the final confirmation must be a clean run of *all three*, not of
+   only the one you last touched. "Green" here means no finding attributable to
+   the document you generated — pre-existing findings in unrelated files, and
+   transient timeouts, are reported to the user, not fixed (see below).
+9. **Report what you changed.** List, in the summary you present to the user:
+   every word added to the wordlist, every `linkcheck_ignore` entry added to
+   `conf.py`, every edit made to the release-notes text itself, and — if the
+   auto-link checker found anything — the recommendation to set
+   `myst_linkify_fuzzy_links = False`. These are edits to files *outside* the
+   new document, so the user must know about them: they will be part of the
+   same commit.
+
+#### Fixing spellcheck findings
+
+Two legitimate fixes exist, and the choice between them is not arbitrary:
+
+- **Correct the release-notes text** when the word is genuinely misspelled —
+  a typo the PR author made (`acomodating` → `accommodating`, `exclusivness` →
+  `exclusiveness`). PR titles are copied verbatim by the builder, so their
+  typos land in the document. Fixing a *spelling error* is not "rewriting the
+  message": it does not change what the entry says, so it does not violate the
+  "never rewrite a message" rule in step 4. Correct the spelling and leave the
+  meaning, the Jira IDs and the PR link untouched.
+- **Add the word to the repo's custom wordlist** when the word is correct but
+  simply not in the dictionary — product names, acronyms and established
+  technical terms (`toolchain`, `autogenerated`, `rediraffe`, `GCS`, `READMEs`).
+  The wordlist is usually `docs/.custom_wordlist.txt` (note the leading dot;
+  some repos use `custom_wordlist.txt`). Find it rather than guessing:
+  `find docs -name '*custom_wordlist*' -not -path '*/.venv/*'`. It is a
+  one-word-per-line file appended to Vale's accepted vocabulary — add the word
+  in the casing the document uses, and keep the trailing blank line at the end
+  of the file (some Makefiles concatenate it with another file).
+
+Three further rules:
+
+- **Prefer a code span over either fix for code-like tokens.** If the flagged
+  token is a filename, module, CLI flag, config key or API name (`charm.py`,
+  `metadata.yaml`, `--use-prs`), wrap it in backticks in the release notes.
+  That both silences the spellchecker and is more correct — and, importantly,
+  it also prevents the linkcheck failure described below. Do this instead of
+  polluting the wordlist with filenames.
+- **Fix an acronym's case rather than adding the lowercase form.** `gcs` in a
+  PR title should become `GCS`; add `GCS` to the wordlist if needed. Don't add
+  `gcs`.
+- **Never silence a finding by deleting the entry** or by rewording it into
+  something vaguer.
+
+#### Fixing linkcheck findings
+
+Linkcheck reports each failure as `WARNING: broken link: <url>` with the source
+file and line, e.g.
+
+```
+docs/reference/release-notes/revision-366.md:116: WARNING: broken link:
+http://charm.py (... Failed to resolve 'charm.py' ...)
+```
+
+Work out which kind of failure it is before fixing it:
+
+- **A bare filename auto-linked by MyST.** This is the common one in release
+  notes and the cause of the example above: MyST's `linkify` extension turns
+  any `something.tld`-looking token in prose into a link, and `.py` gets
+  treated as a domain, so `charm.py` in a PR title becomes
+  `http://charm.py`. **Fix it in the document, by wrapping the token in
+  backticks** (`` `charm.py` ``) — a code span is never linkified. Do *not*
+  add it to `linkcheck_ignore`: the link should not exist at all, and ignoring
+  it leaves a nonsense hyperlink in the published page. The same applies to
+  `test_charm.py`, `metadata.yaml`, `charmcraft.yaml` and any other bare
+  filename a PR title mentions.
+- **A genuinely wrong or stale URL** (a typo, a moved page, a private repo
+  link). Fix the URL in the document.
+- **A URL that is correct but unreachable from CI** — a login-walled page, a
+  chat-room invite, a rate-limiting host, a link that only resolves once the
+  release is published. Add a regex for it to `linkcheck_ignore` in
+  `docs/conf.py`, in the existing list, with a brief comment saying why it
+  can't be checked. Keep entries as narrow as possible — ignore the specific
+  URL or host path, never a broad pattern that would mask future real
+  breakage.
+- **An anchor-only failure** on a host whose pages are JS-rendered belongs in
+  `linkcheck_anchors_ignore_for_url`, not `linkcheck_ignore`.
+- **A transient timeout**, reported as `Read timed out. (read timeout=30)`
+  rather than a 404 or a DNS failure. These are network flakiness, not
+  breakage — slow hosts like `readthedocs-hosted.com` and `canonical.com`
+  time out routinely when linkcheck fires dozens of parallel requests.
+  **Do not "fix" them**: don't edit the URL, and above all don't add them to
+  `linkcheck_ignore` (that would permanently stop checking a link that is
+  perfectly valid). Re-run to confirm they come and go, and if they persist,
+  raise `linkcheck_timeout` in `conf.py` rather than ignoring the URL.
+
+**Scope your attention to the page you generated.** Linkcheck runs over the
+whole docs set, so it will surface pre-existing findings in files you never
+touched. Fix only what your page introduced; mention any pre-existing failures
+to the user as an observation, and do not silently "clean up" unrelated pages
+or add exceptions on their behalf. Compare the reported file paths against the
+document you just saved before acting on anything.
+
+Prefer fixing the document over adding an exception every time both are
+possible: an exception is permanent config debt that hides future breakage,
+while a code span or corrected URL fixes the page itself.
+
+##### Domain squatting via auto-linked filenames — check this explicitly
+
+This is the one failure mode in release notes with a **security and reputation**
+impact rather than a cosmetic one, and the one the docs build will *not* catch
+for you. Treat it as mandatory, not best-effort.
+
+**The mechanism.** MyST enables the `linkify` extension by default, and
+`myst_linkify_fuzzy_links` also defaults to `True`. Together they turn any bare
+`word.tld`-looking token in prose into a hyperlink *without needing a scheme*.
+Release notes are built from raw PR titles, which mention filenames constantly,
+so `README.md` silently becomes `http://README.md`.
+
+**Why it is dangerous.** Many file extensions are also live TLDs — `.md` is
+Moldova, `.py` Paraguay, `.sh` Saint Helena, plus `.io`, `.co`, `.in`, `.rs`,
+`.pl`, `.tf`, `.so`, `.re`, `.cc`, `.ai`. So the bogus link often *resolves*, to
+whoever squats that domain. Observed in a real Canonical docs build:
+
+```
+reference/release-notes/revision-366.md:147: [redirected with Found]
+http://README.md to https://dealsbe.com
+```
+
+**Why linkcheck won't save you:** that is reported as a *redirect*, not as
+`[broken]`, so the build **exits 0** and the page ships with a live hyperlink to
+a stranger's site. A green linkcheck is not evidence of a clean page.
+
+Do all three of the following:
+
+1. **Run the checker** (the primary gate — before the slow linkcheck):
+
+   ```bash
+   python "$BUILDER_HOME/tools/check_autolinks.py" <saved-file>
+   ```
+
+   It asks `linkify-it-py` — the very library MyST uses — what it *would*
+   linkify, so it stays correct as the TLD list evolves. It already ignores
+   code spans, fenced blocks, real URLs, emails, MyST anchors, frontmatter and
+   the review-notes comment, and it reports `file:line:col`, the token, and the
+   URL it would become. Exit status 1 means hazards were found. Add `--explain`
+   to print the fixes. **Do not hand-roll a `grep` for a list of extensions** —
+   a hand-written list is a blocklist that silently misses cases (`.go` and
+   `.html` are *not* TLDs, while `install.sh` and `main.tf` *are* hazards; that
+   is not guessable).
+
+   Fix every hit by **wrapping the token in backticks** (`` `README.md` ``). A
+   code span is never linkified, and a filename belongs in code formatting
+   anyway. Then re-run until clean. After a bulk edit, confirm backticks are
+   balanced — an odd count means an unterminated code span that silently
+   swallows the rest of a line: `grep -o '\`' <file> | wc -l` must be even.
+
+2. **Recommend the root-cause fix to the user.** The per-document fix protects
+   only this page; the next release notes will reintroduce the hazard. One line
+   in the docs' `conf.py` disables the whole class:
+
+   ```python
+   # Don't turn scheme-less tokens (e.g. the "README.md" in a PR title) into
+   # links: many file extensions are live TLDs, so such links resolve to domain
+   # squatters and pass `make linkcheck` as mere redirects.
+   myst_linkify_fuzzy_links = False
+   ```
+
+   Verified behaviour: `README.md`, `charm.py` and `SECURITY.md` stay plain
+   text, while `https://canonical.com/data` and `foo@example.com` are still
+   linked. The only trade-off is that a **bare** domain in prose
+   (`canonical.com/data`, no scheme) stops auto-linking and must be written as
+   an explicit Markdown link — which is better practice regardless. Because
+   this affects the whole docs set and not just your page, **propose it and let
+   the user decide** rather than editing `conf.py` unilaterally.
+
+3. **Audit the link report after linkcheck**, not just its exit code:
+
+   ```bash
+   grep -F '[broken]'    docs/_build/output.txt
+   grep -F '[redirected' docs/_build/output.txt
+   ```
+
+   Inspect every redirect whose target is an unrelated domain.
+
+Never "fix" one of these by adding the bogus URL to `linkcheck_ignore` — that
+hides the problem and leaves the squatted link live in the published page.
 
 ## DA186 compliance checklist
 
@@ -1178,12 +1483,42 @@ Verify the final document against the spec before saving:
       user if none was found — in cross-repo mode; `release-notes/` in
       standalone mode. Never saved into `$BUILDER_HOME/release-notes/` while
       running in cross-repo mode.
+- [ ] If the template emits frontmatter, the file's line 1 is the opening
+      `---` — the review-notes comment and the anchor come *after* the
+      frontmatter block, never before it (see "Frontmatter must be the very
+      first thing in the file"). Verified with `head -1`.
+- [ ] In cross-repo mode, the repo's own docs checks were run against the
+      saved page and **both** pass: `make spelling` and `make linkcheck`
+      (see step 9). The user was warned beforehand that linkcheck takes
+      several minutes.
+- [ ] Every spellcheck finding was resolved either by correcting a genuine
+      typo in the release-notes text, by wrapping a code-like token in
+      backticks, or by adding a correctly-cased word to the repo's
+      `docs/.custom_wordlist.txt` — never by deleting or vaguening an entry.
+- [ ] Every broken link was resolved at its source where possible (bare
+      filenames such as `charm.py` wrapped in backticks so MyST stops
+      linkifying them; wrong URLs corrected), and `linkcheck_ignore` in
+      `docs/conf.py` was used only for URLs that genuinely can't be checked
+      from CI, each with a narrow pattern and a reason.
+- [ ] `tools/check_autolinks.py` reports no hazards for the saved document, so
+      no bare filename can be auto-linked into a squatted domain (e.g.
+      `README.md` → `http://README.md` → an unrelated site). The linkcheck
+      report's `[redirected ...]` lines were audited too — not just its exit
+      code — and if any hazard was found, setting
+      `myst_linkify_fuzzy_links = False` in `docs/conf.py` was recommended to
+      the user as the root-cause fix.
+- [ ] All edits made outside the new document (wordlist additions,
+      `conf.py` linkcheck exceptions) were listed for the user in the final
+      summary.
 
 ## Reference
 
 - Spec: `examples/DA186 - Release notes for Data charms.md`
 - Example output: `examples/Example-release-notes-spec.md`
 - Builder script: `build_release_notes.py` (see `README.md` for CLI reference)
+- Auto-link checker: `tools/check_autolinks.py` — detects bare filenames that
+  MyST would linkify into squatted domains (see step 9); `--explain` prints the
+  `myst_linkify_fuzzy_links = False` root-cause fix
 - Templates: `templates/base.md.j2` (generic DA186 skeleton),
   `templates/kafka.md.j2`, `templates/opensearch.md.j2`,
   `templates/spark.md.j2` — product templates live alongside the base and

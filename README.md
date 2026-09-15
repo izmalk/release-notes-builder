@@ -337,16 +337,117 @@ performed by the agent skill; you only do 1 and 2.
    intro from the merged changelog, compatibility from repository sources of
    truth (`charmcraft.yaml`, `metadata.yaml`, snap/rock metadata, release tags)
    and the previous release notes' table.
-10. **The skill saves the document and reports back**: into the open target
-    repository's existing release-notes folder, following its naming convention
-    (asking you if no such folder exists); or into `release-notes/` here when
-    this repository is itself the workspace. It then deletes the temp drafts and
-    summarises coverage, highlights, and any TODOs left for you in an invisible
-    HTML comment at the top of the file.
+10. **The skill saves the document**: into the open target repository's existing
+    release-notes folder, following its naming convention (asking you if no such
+    folder exists); or into `release-notes/` here when this repository is itself
+    the workspace. It then deletes the temp drafts.
+11. **The skill verifies the page with the repo's own docs checks** and fixes
+    what they report, re-running until both are green — see
+    [Docs checks as the final gate](#docs-checks-as-the-final-gate). It warns
+    you first, because `make linkcheck` takes a few minutes.
+12. **The skill reports back**, summarising coverage, highlights, the TODOs left
+    for you in the review-notes comment, and every edit it made *outside* the
+    new document (wordlist additions, `conf.py` linkcheck exceptions).
 
-The output is a **finished, publishable document** — open items live only in
-that top comment, as imperative TODOs. **Nothing is ever pushed or published**;
-all output stays local.
+The output is a **finished, publishable document** — open items live only in the
+review-notes comment, as imperative TODOs. **Nothing is ever pushed or
+published**; all output stays local.
+
+### Docs checks as the final gate
+
+Release notes are the most check-hostile page in a charm's documentation: the
+body is largely raw PR titles written by developers, so it arrives full of
+misspellings, bare filenames and tool jargon that the docs build treats as
+prose. The skill therefore finishes by running the target repository's own
+checks against the saved page and looping until they pass:
+
+```bash
+python tools/check_autolinks.py <saved-file>   # instant, no network
+cd docs && make spelling                       # fast; fix before linkcheck
+cd docs && make linkcheck                      # slow — several minutes
+```
+
+`make linkcheck` makes a real network request for every external link in the
+whole docs set, and a release-notes page adds one per PR link, so the skill
+**warns you before it starts**. While iterating, it can narrow the spellcheck
+with `make spelling CHECK_PATH=reference/release-notes`, but always confirms
+with a full run.
+
+How findings are resolved, in order of preference:
+
+| Finding | Fix |
+| :--- | :--- |
+| A genuine typo copied from a PR title (`acomodating`) | Correct it in the release notes. A spelling fix doesn't change what the entry says. |
+| A code-like token: filename, module, flag, config key (`charm.py`, `metadata.yaml`, `README.md`) | Wrap it in backticks. This fixes the spellcheck **and** stops MyST's linkify turning `charm.py` into a broken `http://charm.py` link. |
+| A wrong acronym case (`gcs`) | Fix the case to `GCS`; add `GCS` to the wordlist if needed — never add the lowercase form. |
+| A correct word the dictionary lacks (`toolchain`, `rediraffe`, `READMEs`) | Add it to the repo's `docs/.custom_wordlist.txt`, one word per line, in the casing used. |
+| A wrong or stale URL | Correct the URL in the document. |
+| A URL that's correct but unreachable from CI (login-walled, chat invite, not-yet-published) | Add a narrow regex to `linkcheck_ignore` in `docs/conf.py`, with a comment saying why. |
+| A transient `Read timed out` | Leave it alone. Network flakiness, not breakage — never add a valid URL to `linkcheck_ignore`. Raise `linkcheck_timeout` if it persists. |
+| A finding in a file you didn't touch | Report it to the user; don't fix unrelated pages or add exceptions on their behalf. |
+
+Fixing the page always beats adding an exception: a `linkcheck_ignore` entry is
+permanent config debt that hides future breakage. Findings are never silenced by
+deleting or vaguening a changelog entry.
+
+### Domain squatting via auto-linked filenames
+
+**A green linkcheck is not sufficient**, and this failure mode is a security and
+reputation problem rather than a cosmetic one.
+
+MyST enables `linkify` by default, with `myst_linkify_fuzzy_links` also
+defaulting to `True`, so any bare `word.tld` token in prose becomes a link with
+no scheme required. Release notes are made of raw PR titles, which mention
+filenames constantly — and **many extensions are live TLDs** (`.md` Moldova,
+`.py` Paraguay, `.sh` Saint Helena, plus `.io`, `.co`, `.in`, `.rs`, `.pl`,
+`.tf`, `.so`, `.re`, `.cc`, `.ai`). So the bogus link frequently *resolves*, to
+whoever squats the domain. Seen in a real build:
+
+```
+revision-366.md:147: [redirected with Found] http://README.md to https://dealsbe.com
+```
+
+That is a **redirect**, not `[broken]`, so linkcheck exits 0 and the page ships
+with a live link to a stranger's site.
+
+`tools/check_autolinks.py` is the gate for this. It asks `linkify-it-py` — the
+library MyST itself uses — what it *would* linkify, so it stays correct as the
+TLD list changes, and it ignores code spans, fenced blocks, real URLs, emails,
+MyST anchors, frontmatter and the review-notes comment:
+
+```console
+$ python tools/check_autolinks.py docs/reference/release-notes/revision-366.md
+revision-366.md:147:16: 'README.md' would be auto-linked as http://README.md
+1 linkify hazard(s) found. Wrap each token in backticks.
+Re-run with --explain for the conf.py root-cause fix.
+```
+
+A hand-written `grep` over a list of extensions is *not* an adequate substitute:
+`.go` and `.html` are not TLDs (no hazard), while `install.sh` and `main.tf` are
+— which isn't guessable, so a blocklist silently misses cases.
+
+**The root-cause fix**, which the skill recommends but leaves to you, since it
+affects the whole docs set:
+
+```python
+# docs/conf.py
+myst_linkify_fuzzy_links = False
+```
+
+Verified: `README.md`, `charm.py`, `SECURITY.md` stay plain text, while
+`https://canonical.com/data` and `foo@example.com` still link. The only
+trade-off is that **scheme-less** domains in prose (`canonical.com/data`) stop
+auto-linking and must be written as explicit Markdown links — better practice
+anyway.
+
+### Frontmatter goes on line 1
+
+If the product's template emits frontmatter (MyST `html_meta`), the opening
+`---` must be the **very first line** of the saved file — Sphinx/MyST only
+recognises frontmatter there. The review-notes comment and the MyST anchor come
+*after* it. Put anything before the frontmatter and the `---` fences are parsed
+as body transitions, the `# Revision N` title stops being the document title,
+and the build warns `Document headings start at H2, not H1`.
 
 ## How the builder script works
 
@@ -607,6 +708,8 @@ release-notes-builder/
 │   ├── kafka.md.j2                 # Charmed Apache Kafka extension
 │   ├── opensearch.md.j2            # Charmed OpenSearch extension
 │   └── spark.md.j2                 # Charmed Apache Spark extension
+├── tools/
+│   └── check_autolinks.py          # Flags filenames MyST would linkify
 ├── examples/
 │   ├── DA186 - Release notes for Data charms.md   # Spec reference
 │   ├── Example-release-notes-spec.md              # PostgreSQL example
@@ -614,16 +717,19 @@ release-notes-builder/
 ├── release-notes/                  # Standalone-mode output
 ├── spec/                           # DA186 / DA288 source documents
 ├── tests/
-│   └── test_autosort_rules.py      # Pins the auto-sort rule table
+│   ├── test_autosort_rules.py      # Pins the auto-sort rule table
+│   └── test_check_autolinks.py     # Pins the linkify-hazard detector
 ├── .github/skills/release-notes/SKILL.md   # Agent skill — the only file users install
 └── README.md                       # This file
 ```
 
 Only `SKILL.md` is distributed to users; it fetches `build_release_notes.py`,
-`templates/` and `requirements.txt` from this repo on demand into
+`templates/`, `tools/` and `requirements.txt` from this repo on demand into
 `~/.cache/release-notes-builder/`. Nothing here needs to be cloned to use the
 skill, and the cache lives outside every repository so it can never be committed
 by accident.
+
+Run the tests with `python -m pytest tests/ -q`.
 
 ## License
 
