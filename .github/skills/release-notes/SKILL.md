@@ -1,7 +1,7 @@
 ---
 name: release-notes
 description: 'Generate DA186-compliant release notes for Canonical Data & AI charms. Use when the user asks to "generate release notes", "create release notes", "compile a changelog", "prepare release notes draft", or a similar phrasing/verb, for one or multiple charm repositories (e.g. canonical/kafka-operator) or a link to a previously published release-notes page, optionally for a branch, track, or a commit range. Gathers changes via GitHub API, discovers sibling components from prior release notes, merges multi-repo notes into a single product draft, writes intro and compatibility sections, and saves the result locally for review. Never publishes anything.'
-argument-hint: '[repo ...] [--track TRACK] [--branch BRANCH] [--from-ref REF] [--to-ref REF]'
+argument-hint: '[repo ...] [--track TRACK] [--branch BRANCH] [--from-ref REF] [--to-ref REF] [auto-sort on|off]'
 ---
 
 # Release Notes Generation (DA186)
@@ -26,6 +26,10 @@ repository.
 - "Write the next OpenSearch release notes" (any generation verb — create,
   write, build, draft, compile, prepare — is treated the same; see "Any
   generation verb triggers this skill" below)
+- "Generate release notes for canonical/opensearch-operator with auto-sort on"
+  (opts in to reclassifying the "Other improvements" catch-all by
+  conventional-commit prefix; `auto-sort off` opts out — see "Auto-sort"
+  below, which is off unless enabled)
 
 ## Running this skill from another repository (the common case)
 
@@ -260,6 +264,158 @@ When scoped to a single track, every per-repo `--branch`/`--from-ref`/
 `--to-ref` below refers to that track's branch only (e.g. `3.5/edge`,
 `track/3.5`) — not the repo's other tracks.
 
+## Auto-sort: reclassifying the "Other improvements" catch-all
+
+"Other improvements" is the builder's `DEFAULT_CATEGORY` — every entry whose
+PR carries no recognised label lands there (see "Label → category mapping" in
+the README). In practice most Data charm PRs are unlabelled, so this one
+category routinely swallows the majority of a release's entries, including
+genuine features and bug fixes. Observed in real runs: 59 of 65 entries for
+Charmed Apache Kafka, and **67 of 67** for Charmed OpenSearch, whose previous
+published release notes nonetheless had populated Features and Bug fixes
+sections — proving the catch-all was hiding real content.
+
+**Auto-sort** is an optional pass that walks every entry in "Other
+improvements" and moves the ones whose own text unambiguously identifies a
+more specific DA186 category, using conventional-commit prefixes and entry
+titles as the evidence.
+
+### Default: off, but always offered
+
+Auto-sort is **off by default**. Do not run it silently.
+
+1. If the user's request explicitly enables or disables it, obey that and do
+   not ask (see "Recognising explicit instructions" below).
+2. Otherwise, **ask once**, batched with the other step-1 questions where
+   possible. Ask *after* the per-repo drafts exist, so the question can be
+   quantified — e.g. "48 of 67 entries are in Other improvements; 14 of them
+   look like features or bug fixes by their commit prefix. Run auto-sort?".
+   A question the user can answer with real numbers in front of them is far
+   more useful than an abstract one.
+3. If the user declines or does not answer, leave every entry where the
+   builder put it and fall back to the conservative behaviour in step 4's
+   "Categorisation" bullet (flag, don't move).
+
+### Recognising explicit instructions
+
+Treat any of these as switching the feature **on**: "auto-sort on",
+"autosort", "auto sort", "enable auto-sort", "sort the other improvements",
+"sort the kitchen sink", "recategorise the catch-all", "reclassify entries by
+commit prefix", "use conventional commits to categorise". Treat these as
+switching it **off**: "auto-sort off", "no auto-sort", "disable auto-sort",
+"don't recategorise", "don't move entries", "leave the categories alone",
+"keep the builder's categories". Hyphenation, spacing and capitalisation are
+irrelevant (`auto-sort`, `autosort`, `Auto Sort` are the same instruction).
+If an instruction is ambiguous ("sort the changelog" — sort *how*?), ask
+rather than assume.
+
+### What auto-sort may move, and on what evidence
+
+Move an entry **only** when its own text carries one of the signals below.
+The entry text is never rewritten — auto-sort reorders entries between
+categories, it does not edit them.
+
+| Evidence in the entry text | Move to |
+|---|---|
+| `feat:` / `feature:` prefix | Features |
+| `fix:` / `bugfix:` / `bug-fix:` / `hotfix:` prefix | Bug fixes |
+| Title starts with a fix verb: "Fix …", "Fixes …", "Fixed …", "Fixing …", "Resolve …", "Correct …" | Bug fixes |
+| `security:` prefix, or a `CVE-NNNN-NNNNN` reference | Security |
+| `!` before the colon (`feat!:`, `refactor!:`), or "BREAKING CHANGE" | Breaking changes |
+| `perf:` prefix | Features |
+| `revert:` prefix | Leave in place, and flag it (a revert may belong with whatever it reverted) |
+
+Prefixes that are **already** correctly served by "Other improvements" and
+must never trigger a move: `chore:`, `docs:`, `ci:`, `cicd:`, `build:`,
+`deps:`, `test:`, `style:`, `refactor:` (without `!`), `patch:`.
+
+A leading bracketed Jira tag does not hide a prefix: `[DPE-4546] fix: …` is a
+`fix:` entry, and a scope is likewise transparent (`feat(api): …` is `feat:`).
+
+**A neutral prefix takes precedence over a fix verb appearing later in the
+title.** `patch: Fix tag in metadata.yaml` and `docs: Fix spread install in GH
+workflow` are settled by their `patch:`/`docs:` prefix and stay in "Other
+improvements" — do not flag them, because the author already classified them.
+Only consult the fix-verb rule when the entry has no conventional-commit
+prefix at all.
+
+The only exception to prefix precedence is a breaking or security signal:
+`refactor!:` is a breaking change despite the neutral `refactor` type, and a
+`CVE-NNNN-NNNNN` reference makes an entry a Security entry even when the
+prefix is `fix:` or `deps:`.
+
+### The exception that matters most: infrastructure-only fixes
+
+A `fix:` prefix does **not** justify moving an entry to "Bug fixes" when the
+fix targets the project's own tooling rather than the shipped product. DA186's
+"Bug fixes" means user-visible defects; a repaired CI job is an "Other
+improvement". Keep an entry in "Other improvements", despite a fix signal,
+when its text refers to: CI, GitHub Actions, workflows, runners, permissions,
+linting, spread/tox/pytest setup, test fixtures or flaky tests, release
+plumbing, tags, version pinning, build caches, or documentation builds.
+
+Match these terms as **whole words**, not as fragments. Several are short enough
+to hide inside ordinary product vocabulary: `ci` sits inside "precision",
+"decision", "explicit", "specific", "capacity", "circuit" and "efficiency";
+`tag` inside "stage"; `pin` inside "pinning"; `build` inside "builder". Treating
+them as substrings would withhold genuine bug fixes such as "fix: precision loss
+in shard allocation". Do count inflected forms ("tests", "tagging", "caches")
+and treat `_` as a word boundary, so "test" is found in
+`test_certificate_transfer`.
+
+Note the difference between this list and the neutral-prefix list above, which
+overlap on `ci`, `test` and `build`. A neutral **prefix** records what the author
+declared the change to be, and needs no flag. An infrastructure **term** describes
+what a fix targets, and is only consulted once a fix signal is already present.
+So `ci: re-enable cached builds` stays put unflagged, while `fix: re-enable CI
+cached builds` stays put *and* is flagged.
+
+Verified examples of `fix`-signalled entries that must NOT move:
+"fix: Fix spread installation", "fix: Fix tutorial test", "patch: Fix tag in
+metadata.yaml", "Fix charm Build", "fix: action permissions",
+"fix: release output name", "fix: use full chain in test_certificate_transfer".
+
+Verified examples that legitimately do move to Bug fixes:
+"fix: handle the situation that opensearch_failover does not exist",
+"fix: set blocked status for invalid object-storage secrets",
+"fix: add missing LIBID to notifications manager".
+
+When a fix signal is present but you cannot tell from the title whether the
+target is shipped behaviour or tooling, **leave the entry in place and flag
+it** — a wrong move is worse than an unsorted entry, because it silently
+misrepresents the release.
+
+### What auto-sort will not catch
+
+Auto-sort keys off signals in the text, so an entry with no conventional-commit
+prefix and no fix verb is never moved, however feature-like it reads. Verified
+misses from a real Charmed OpenSearch range: "add smtp support" (#789) and "add
+rollback compatibility" (#786) are both plainly features but carry no `feat:`
+prefix, so auto-sort leaves them in "Other improvements". Enabling auto-sort
+therefore **reduces** the manual review burden; it does not remove it. Still
+read the catch-all afterwards.
+
+This is deliberate. Guessing from prose ("add …", "support …", "introduce …")
+would move CI and docs entries too, and a wrong move misrepresents the release
+in published notes. Precision is worth more here than recall.
+
+### Auto-sort is per-component
+
+Run the pass separately within each component's block. Never move an entry
+from one component to another; components are separate charms with separate
+revisions.
+
+### Every move must be recorded
+
+Auto-sort changes what the published document claims about each change, so it
+must be auditable. In the review-notes comment, state that auto-sort ran, and
+list every entry it moved as `PR #N: "<title>" — Other improvements → <new
+category> (evidence: <the signal>)`. Also list entries that carried a signal
+but were deliberately left in place, with the reason. The release owner must
+be able to reverse any single decision without re-deriving it.
+
+If auto-sort moves nothing, say so explicitly rather than omitting the note.
+
 ## Keep data gathering lean
 
 The reference-resolution phase (step 1) is the easiest place to burn an
@@ -314,6 +470,7 @@ involved. Follow these rules:
 | From-ref | See "Resolving from-ref" below | Tag/SHA/branch |
 | To-ref | HEAD of the branch | Tag/SHA/branch |
 | Product name / title | Derived from repos | e.g. "Charmed Apache Kafka" |
+| Auto-sort | **Off** | Reclassify the "Other improvements" catch-all by conventional-commit prefix. Ask once if not specified; the user can say "auto-sort on/off" — see "Auto-sort" above |
 | Output file | See step 8: the target repo's existing release-notes location when run cross-repo, else `release-notes/<product>-<to-ref>.md` | Ask the user if no existing location can be found in the target repo |
 
 If the user gives only repositories, proceed with defaults and only ask
@@ -528,10 +685,14 @@ altering the facts**:
   once (see "Label → category mapping" in the README): the DA186 category
   labels (`Features`, `Breaking changes`, `Security`, `Bug fixes`, `Other
   improvements`) and the legacy ones (`bug`, `enhancement`, `not bug or
-  enhancement`, `breaking`), so a repo may mix both. Anything unlabelled
-  lands in "Other improvements", which is where most miscategorisation shows
-  up. Recategorise only when the message itself is unambiguous (e.g. a `fix:`
-  prefix). Otherwise leave and flag.
+  enhancement`, `documentation`, `breaking`), so a repo may mix both.
+  Anything unlabelled lands in "Other improvements", which is where most
+  miscategorisation shows up.
+  - **If auto-sort is enabled** (see "Auto-sort" above), run its pass now,
+    per component, and record every move in the review notes.
+  - **If auto-sort is off**, recategorise only when the message itself is
+    unambiguous (e.g. a `fix:` prefix on a change to shipped behaviour).
+    Otherwise leave the entry and flag it.
 - **False Jira IDs**: the builder script links any `[A-Z][A-Z0-9]+-\d+`
   pattern as a Jira ticket. It automatically excludes `CVE-*` (Common
   Vulnerabilities and Exposures IDs, e.g. `CVE-2026-1234` truncated to
@@ -611,6 +772,13 @@ Query the user for a preferred resolution when:
 - A confirmed sibling component's GitHub repo can't be determined
   automatically (step 1.4.d) — ask the user for the repository address
   instead of guessing.
+- Auto-sort was neither enabled nor disabled in the user's request — ask once
+  whether to run it, quantifying the offer with the actual counts from the
+  generated drafts (see "Auto-sort" above).
+- An entry carries a fix/feature signal but its title doesn't reveal whether
+  it targets shipped behaviour or only tooling, and auto-sort is enabled —
+  leave it in place and flag it rather than asking per entry; only ask if
+  several such entries would materially change the release's shape.
 
 Batch unrelated small questions into one ask; never ask about anything you
 can resolve yourself from the repos.
@@ -720,6 +888,11 @@ Verify the final document against the spec before saving:
       components beyond the one(s) the user named or linked to, and asked
       the user to confirm before including any of them (see step 1.4) —
       never added a detected sibling component silently.
+- [ ] Auto-sort was either explicitly requested/declined by the user, or the
+      user was asked about it — it never ran silently, and never ran at all
+      unless enabled (see "Auto-sort"). If it ran, every move is listed in
+      the review notes with its evidence, and no entry was moved across
+      component boundaries or edited in the process.
 - [ ] If the input was a link to a previously published release-notes page,
       the generated document covers the *next* release after that page, not
       the release the page itself documents.

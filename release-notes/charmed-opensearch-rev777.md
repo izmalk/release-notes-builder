@@ -46,30 +46,48 @@ TODOs — act on each before publishing:
    summarises what the commit range contains; rewrite it as the real product
    summary and drop anything that does not belong in this release.
 
-5. Re-categorise entries by hand — this is the largest task in this document.
-   Every one of the 67 entries landed in "Other improvements" because **no PR
-   in either range carries a `bug` or `enhancement` label**; the only labels
-   used were `documentation` (14) and `dependencies`/`not bug or enhancement`
-   (1 each), all of which map to "Other improvements". Contrast this with
-   revision 315, which published populated Features and Bug fixes sections
-   for both components, so the sections are expected to be non-empty here too.
-   Candidates spotted while merging, left in place because the wording alone
-   is not decisive — verify each against its PR before moving it:
-   - Likely **Features**: "feat: support GCS repository for snapshot
-     operations" (#766), "feat: create buckets/containers if not available"
-     (#782), "add smtp support" (#789), "add rollback compatibility" (#786).
-   - Likely **Bug fixes**: "fix: handle the situation that opensearch_failover
-     does not exist" (#781), "fix: set blocked status for invalid
-     object-storage secrets" (#804), "fix: add missing LIBID to notifications
-     manager" (#797), "Bug-fix: removing the hard-coded unit value…" (#799),
-     "Fix charm Build" (#806), "Fix/temporary file service account gcs"
-     (#815).
-   - Deliberately NOT moved: `fix:`/`patch:` entries that touch tests, CI or
-     release plumbing rather than shipped behaviour (#812, #834, #836, #848,
-     #854, #246, #278).
-   To avoid repeating this next release, consider labelling PRs — the builder
-   accepts either the DA186 category labels or the legacy `bug`/`enhancement`
-   ones (see "Label → category mapping" in the builder's README).
+5. Review the categorisation, then consider labelling PRs going forward.
+   All 67 entries initially landed in "Other improvements" because **no PR in
+   either range carries a `bug` or `enhancement` label**; the only labels used
+   were `documentation` (14) and `dependencies`/`not bug or enhancement` (1
+   each), all of which map to "Other improvements". Revision 315 published
+   populated Features and Bug fixes sections for both components, so those
+   sections were expected to be non-empty here too.
+
+   AUTO-SORT RAN on this document (enabled for this run) and moved 7 entries
+   in Charmed OpenSearch, all on conventional-commit evidence:
+   - PR #766: "feat: support GCS repository for snapshot operations" —
+     Other improvements → Features (evidence: `feat:` prefix)
+   - PR #782: "feat: create buckets/containers if not available" —
+     Other improvements → Features (evidence: `feat:` prefix)
+   - PR #781: "fix: handle the situation that opensearch_failover does not
+     exist" — Other improvements → Bug fixes (evidence: `fix:` prefix,
+     shipped behaviour)
+   - PR #797: "fix: add missing LIBID to notifications manager" —
+     Other improvements → Bug fixes (evidence: `fix:` prefix)
+   - PR #799: "Bug-fix: removing the hard-coded unit value…" —
+     Other improvements → Bug fixes (evidence: `Bug-fix:` prefix)
+   - PR #804: "fix: set blocked status for invalid object-storage secrets" —
+     Other improvements → Bug fixes (evidence: `fix:` prefix)
+   - PR #815: "Fix/temporary file service account gcs" —
+     Other improvements → Bug fixes (evidence: leading fix verb)
+   Nothing was moved in Charmed OpenSearch Dashboards: no entry in its range
+   carries a feature or fix signal.
+
+   Auto-sort deliberately LEFT these in place despite a fix signal, because
+   each targets tooling rather than shipped behaviour — confirm you agree:
+   #672 ("Fix manual upgrades tests…"), #787 ("[Docs] Fix the 404 error
+   page"), #806 ("Fix charm Build"), #812 ("fix: Fix spread installation"),
+   #854 ("fix: Fix tutorial test").
+
+   Auto-sort could NOT catch these, which still need a manual decision —
+   both read as features but carry no `feat:` prefix, and auto-sort never
+   guesses from prose: #789 ("add smtp support") and #786 ("add rollback
+   compatibility").
+
+   To avoid this next release, consider labelling PRs — the builder accepts
+   either the DA186 category labels or the legacy `bug`/`enhancement` ones
+   (see "Label → category mapping" in the builder's README).
 
 6. Verify these flagged entries:
    - `opensearch-operator` #830 and `opensearch-dashboards-operator` #275 both
@@ -109,36 +127,44 @@ This release adds Google Cloud Storage as a snapshot repository backend and SMTP
 
 The primary charm gained new snapshot and notification capabilities, moved onto the shared single-kernel library, and absorbed the Kubernetes charm.
 
+### Features
+
+* feat: support GCS repository for snapshot operations ([PR \#766](https://github.com/canonical/opensearch-operator/pull/766))
+* feat: create buckets/containers if not available ([PR \#782](https://github.com/canonical/opensearch-operator/pull/782))
+
+### Bug fixes
+
+This release includes the following bug fixes:
+
+* fix: handle the situation that opensearch_failover does not exist ([PR \#781](https://github.com/canonical/opensearch-operator/pull/781))
+* fix: add missing LIBID to notifications manager ([PR \#797](https://github.com/canonical/opensearch-operator/pull/797))
+* Bug-fix: removing the hard-coded unit value + acomodating for the mutual exclusivness of units and machines variables ([PR \#799](https://github.com/canonical/opensearch-operator/pull/799))
+* fix: set blocked status for invalid object-storage secrets ([PR \#804](https://github.com/canonical/opensearch-operator/pull/804))
+* Fix/temporary file service account gcs ([PR \#815](https://github.com/canonical/opensearch-operator/pull/815))
+
 ### Other improvements
 
 * Release notes for new release ([PR \#761](https://github.com/canonical/opensearch-operator/pull/761))
 * Pin Terraform Version ([PR \#778](https://github.com/canonical/opensearch-operator/pull/778))
-* fix: handle the situation that opensearch_failover does not exist ([PR \#781](https://github.com/canonical/opensearch-operator/pull/781))
 * chore: update rust toolchain ([PR \#784](https://github.com/canonical/opensearch-operator/pull/784))
 * docs: Home page remodeling ([PR \#785](https://github.com/canonical/opensearch-operator/pull/785))
-* feat: support GCS repository for snapshot operations ([PR \#766](https://github.com/canonical/opensearch-operator/pull/766))
 * [[DPE-7579](https://warthogs.atlassian.net/browse/DPE-7579)] Fix manual upgrades tests for large deployments ([PR \#672](https://github.com/canonical/opensearch-operator/pull/672))
 * [Docs] Fix the 404 error page ([PR \#787](https://github.com/canonical/opensearch-operator/pull/787))
 * docs: add Dashboards documentation link to the Nav Menu ([PR \#776](https://github.com/canonical/opensearch-operator/pull/776))
 * docs: Implement rediraffe redirects ([PR \#788](https://github.com/canonical/opensearch-operator/pull/788))
-* feat: create buckets/containers if not available ([PR \#782](https://github.com/canonical/opensearch-operator/pull/782))
 * [[DPE-9144](https://warthogs.atlassian.net/browse/DPE-9144)] add smtp support ([PR \#789](https://github.com/canonical/opensearch-operator/pull/789))
 * docs: Add GA and cookie consent ([PR \#791](https://github.com/canonical/opensearch-operator/pull/791))
 * docs: Add autogenerated metadata description ([PR \#793](https://github.com/canonical/opensearch-operator/pull/793))
 * chore: add LIBID, LIBPATCH to notifications ([PR \#795](https://github.com/canonical/opensearch-operator/pull/795))
-* fix: add missing LIBID to notifications manager ([PR \#797](https://github.com/canonical/opensearch-operator/pull/797))
 * [[DPE-9280](https://warthogs.atlassian.net/browse/DPE-9280)] docs: Restructure documentation content ([PR \#790](https://github.com/canonical/opensearch-operator/pull/790))
-* Bug-fix: removing the hard-coded unit value + acomodating for the mutual exclusivness of units and machines variables ([PR \#799](https://github.com/canonical/opensearch-operator/pull/799))
 * docs: Update the cookie banner ([PR \#801](https://github.com/canonical/opensearch-operator/pull/801))
 * [[DPE-4727](https://warthogs.atlassian.net/browse/DPE-4727)] docs: Add Dashboards mentions ([PR \#798](https://github.com/canonical/opensearch-operator/pull/798))
 * Fix charm Build ([PR \#806](https://github.com/canonical/opensearch-operator/pull/806))
 * Re-enable charmcraft build cache ([PR \#807](https://github.com/canonical/opensearch-operator/pull/807))
 * [[DPE-9332](https://warthogs.atlassian.net/browse/DPE-9332)] docs: Add Dashboard docs content as a submodule ([PR \#803](https://github.com/canonical/opensearch-operator/pull/803))
-* fix: set blocked status for invalid object-storage secrets ([PR \#804](https://github.com/canonical/opensearch-operator/pull/804))
 * [[DPE-9411](https://warthogs.atlassian.net/browse/DPE-9411)] docs: Structure updates ([PR \#808](https://github.com/canonical/opensearch-operator/pull/808))
 * fix: Fix spread installation ([PR \#812](https://github.com/canonical/opensearch-operator/pull/812))
 * [[DPE-9412](https://warthogs.atlassian.net/browse/DPE-9412)] docs: Us spelling update ([PR \#810](https://github.com/canonical/opensearch-operator/pull/810))
-* Fix/temporary file service account gcs ([PR \#815](https://github.com/canonical/opensearch-operator/pull/815))
 * [[DPE-9022](https://warthogs.atlassian.net/browse/DPE-9022)] Add rollback docs ([PR \#743](https://github.com/canonical/opensearch-operator/pull/743))
 * [[DPE-9134](https://warthogs.atlassian.net/browse/DPE-9134)] add rollback compatibility ([PR \#786](https://github.com/canonical/opensearch-operator/pull/786))
 * patch: Remove unit tests, integration tests(except test_charm.py) and remove charm code leaving only charm.py ([PR \#818](https://github.com/canonical/opensearch-operator/pull/818))

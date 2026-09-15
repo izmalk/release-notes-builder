@@ -48,7 +48,9 @@ review". Steps 3–10 are performed by the agent skill; you only do 1 and 2.
    the same pass — one `## <Component>` heading per component with changes,
    DA186-ordered categories beneath it, duplicates and miscategorised entries
    fixed, false Jira-ID links dropped. Facts are never rewritten; ambiguous
-   cases are raised with you. There is deliberately no merge script.
+   cases are raised with you. There is deliberately no merge script. If
+   [auto-sort](#auto-sort-reclassifying-the-other-improvements-catch-all) is
+   enabled, this is where it reclassifies the "Other improvements" catch-all.
 9. **The skill writes the introduction and the Compatibility section** — the
    intro from the merged changelog, compatibility from repository sources of
    truth (`charmcraft.yaml`, `metadata.yaml`, snap/rock metadata, release tags)
@@ -73,6 +75,11 @@ or:
 
 > Create release notes for
 > https://canonical.com/data/opensearch/docs/2/reference/release-notes/revision-315/
+
+Add `auto-sort on` (or `off`) to skip the question about reclassifying the
+"Other improvements" catch-all:
+
+> Create release notes for canonical/opensearch-operator with auto-sort on
 
 ## Running it from the repo you're releasing (recommended, common case)
 
@@ -289,6 +296,99 @@ LABEL_CATEGORY_MAP = {
 }
 ```
 
+## Auto-sort: reclassifying the "Other improvements" catch-all
+
+Because most Data charm PRs are unlabelled, `DEFAULT_CATEGORY` ("Other
+improvements") tends to swallow most of a release — including real features and
+bug fixes. Measured on actual releases: **59 of 65** entries for Charmed Apache
+Kafka, and **67 of 67** for Charmed OpenSearch, whose own previous release notes
+had populated Features and Bug fixes sections.
+
+**Auto-sort** is a step performed by the agent skill (not the builder script)
+that walks every entry in "Other improvements" and moves the ones whose text
+unambiguously identifies a more specific category, using conventional-commit
+prefixes and titles as evidence. Entry text is never edited — entries only move
+between categories.
+
+### Turning it on and off
+
+Auto-sort is **off by default** and never runs silently. If you don't say either
+way, the skill asks once, quantified against the generated drafts (e.g. "48 of 67
+entries are in Other improvements; 14 look like features or fixes — run
+auto-sort?"). To skip the question, say so in your request:
+
+| Say this | Effect |
+| :--- | :--- |
+| `auto-sort on`, `autosort`, `sort the other improvements`, `sort the kitchen sink`, `recategorise the catch-all` | Enabled |
+| `auto-sort off`, `no auto-sort`, `leave the categories alone`, `keep the builder's categories` | Disabled |
+
+Hyphenation, spacing and capitalisation don't matter.
+
+### Signals it acts on
+
+| Evidence in the entry text | Move to |
+| :--- | :--- |
+| `feat:` / `feature:` / `perf:` prefix | Features |
+| `fix:` / `bugfix:` / `bug-fix:` / `hotfix:` prefix, or a title starting "Fix…" / "Fixing…" / "Resolve…" / "Correct…" | Bug fixes |
+| `security:` prefix, or a `CVE-NNNN-NNNNN` reference | Security |
+| `!` before the colon (`feat!:`), or "BREAKING CHANGE" | Breaking changes |
+| `revert:` prefix | Never moved — flagged instead |
+
+`chore:`, `docs:`, `ci:`, `build:`, `deps:`, `test:`, `style:`, `refactor:` and
+`patch:` never trigger a move, and a neutral prefix **beats** a fix verb later in
+the title (`patch: Fix tag in metadata.yaml` stays put, unflagged).
+
+Note that `ci`, `test` and `build` appear both as neutral prefixes and as
+infrastructure terms (below). They answer different questions and are read from
+different parts of the entry: a *prefix* is the author's own classification, so
+`ci: re-enable cached builds` is left alone silently; an *infrastructure term* is
+what a fix targets, so `fix: re-enable CI cached builds` is left alone **and**
+flagged.
+
+### The infrastructure exception
+
+A `fix:` prefix alone does not make something a DA186 bug fix, which means a
+*user-visible* defect. Entries whose fix targets CI, workflows, runners,
+permissions, linting, test setup, flaky tests, release plumbing, tags, build
+caches or docs builds stay in "Other improvements" and are flagged rather than
+moved. So `fix: Fix spread installation` stays, while `fix: set blocked status
+for invalid object-storage secrets` moves.
+
+These terms match on **word boundaries**. Several are short enough to hide inside
+ordinary product vocabulary — `ci` inside "precision", "decision", "capacity",
+"circuit"; `tag` inside "stage"; `pin` inside "pinning" — so substring matching
+would wrongly withhold real bug fixes like `fix: precision loss in shard
+allocation`. Inflected forms ("tests", "tagging", "caches") do count, and `_` is
+treated as a boundary so `test` is found in `test_certificate_transfer`.
+
+When a fix signal is present but the title doesn't reveal whether the target is
+shipped behaviour or tooling, the entry is left in place and flagged — a wrong
+move silently misrepresents the release, so precision is preferred over recall.
+
+### What it won't catch
+
+Entries with no prefix and no fix verb are never moved, however feature-like
+they read: `add smtp support` and `add rollback compatibility` (both real
+OpenSearch entries) stay in the catch-all. Auto-sort *reduces* manual review; it
+doesn't replace it. Guessing from prose would drag CI and docs entries along
+with the genuine features.
+
+### Auditability
+
+Every move is recorded in the document's review-notes comment as `PR #N:
+"<title>" — Other improvements → <category> (evidence: <signal>)`, together with
+entries that carried a signal but were deliberately left alone. If auto-sort
+moves nothing, it says so. Auto-sort also never moves an entry between
+components.
+
+The rules are pinned by tests in `tests/test_autosort_rules.py`, which encode
+the table above and assert it against real entry titles from Charmed Apache
+Kafka and Charmed OpenSearch releases:
+
+```bash
+python -m pytest tests/test_autosort_rules.py -q
+```
+
 ## Templates
 
 ### Base template (`templates/base.md.j2`)
@@ -385,6 +485,8 @@ release-notes-builder/
 │   └── 205-248.md / 205-248-prs.md / 205-head.md  # Sample generated outputs
 ├── release-notes/                  # Standalone-mode output
 ├── spec/                           # DA186 / DA288 source documents
+├── tests/
+│   └── test_autosort_rules.py      # Pins the auto-sort rule table
 ├── .github/skills/release-notes/SKILL.md   # Agent skill (the workflow above)
 └── README.md                       # This file
 ```
