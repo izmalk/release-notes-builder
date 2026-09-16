@@ -90,10 +90,12 @@ priority over everything the skill would otherwise detect:
 > Everything from 2.1.0
 
 The skill matches the name you used against the repo's actual tags (which may
-be `rev247`, `revision-247`, `v2.1.0` …), checks the ref really is an ancestor
-of the branch, and treats it **exclusively** — you get the release *after* the
-one you named. If your phrasing could also mean "document that release itself",
-it asks rather than shifting every entry by one release.
+be `rev247`, `revision-247`, `v2.1.0`, or namespaced as `kafka/rev247` — see
+[The range and the revision number](#the-range-and-the-revision-number)), checks
+the ref really is an ancestor of the branch, and treats it **exclusively** — you
+get the release *after* the one you named. If your phrasing could also mean
+"document that release itself", it asks rather than shifting every entry by one
+release.
 
 Or point at a **previously published** release-notes page, from which the skill
 derives the product, the track, the starting ref and the component list, and
@@ -292,7 +294,7 @@ If you run the script by hand rather than through the skill, the output is a
 ## End-to-end workflow
 
 This is what the skill does in [option A](#a--from-the-target-repo-recommended),
-from "we want to release" to "a document ready for review". Steps 3–10 are
+from "we want to release" to "a document ready for review". Steps 3–13 are
 performed by the agent skill; you only do 1 and 2.
 
 1. **You decide to release** a new charm revision (or a new product release).
@@ -309,49 +311,190 @@ performed by the agent skill; you only do 1 and 2.
    product, the track, the starting ref, and the component list, and generates
    the *next* release after it.
 4. **The skill resolves scope and references**: the track (one track per
-   document by default), the branch, `from-ref` (user-specified → the open
-   repo's newest documented release → latest ancestor tag/release → the docs
-   site → ask you), and `to-ref` (branch HEAD by default). It reports what it
-   inferred rather than asking you to supply it.
-5. **The skill discovers the product's sibling components** — companion charms,
+   document by default), the branch, `from-ref` (user-specified → the repo's
+   newest documented release → the docs site → latest ancestor tag), and
+   `to-ref` (branch HEAD by default). It reports what it inferred rather than
+   asking you to supply it.
+5. **The skill settles the revision number the document will be titled with**
+   from the repo's tags, then cross-checks it against what the repo already
+   documents — see
+   [The range and the revision number](#the-range-and-the-revision-number). If
+   the number isn't ahead of every documented release, it stops and asks you
+   instead of generating. And if you pinned neither end of the range, it puts the
+   inferred `from-ref`, `to-ref` and revision number to you for confirmation or
+   override first, batched with its other questions.
+6. **The skill discovers the product's sibling components** — companion charms,
    snaps, rocks, Terraform modules, dashboards — from the previous release
    notes, and **asks you to confirm each one** before adding it to scope. It
    never adds a component silently, and asks for the repository address if a
    component can't be mapped to one automatically.
-6. **The skill selects the product's Jinja template** from `templates/` (matched
+7. **The skill selects the product's Jinja template** from `templates/` (matched
    on product, not repository). If none exists, it **creates one** from the
    product's most recent published release notes and verifies it renders. It
    never falls back to the generic `base.md.j2` for a product that already has
    published release notes.
-7. **The skill runs `build_release_notes.py` once per repository** in scope,
+8. **The skill runs `build_release_notes.py` once per repository** in scope,
    writing per-repo drafts into a system temp directory (never into either
    repository's tree).
-8. **The skill merges the drafts into one product document** and polishes it in
+9. **The skill merges the drafts into one product document** and polishes it in
    the same pass — one `## <Component>` heading per component with changes,
    DA186-ordered categories beneath it, duplicates and miscategorised entries
    fixed, false Jira-ID links dropped. Facts are never rewritten; ambiguous
    cases are raised with you. There is deliberately no merge script. If
    [auto-sort](#auto-sort-reclassifying-the-other-improvements-catch-all) is
    enabled, this is where it reclassifies the "Other improvements" catch-all.
-9. **The skill writes the introduction and the Compatibility section** — the
-   intro from the merged changelog, compatibility from repository sources of
-   truth (`charmcraft.yaml`, `metadata.yaml`, snap/rock metadata, release tags)
-   and the previous release notes' table.
-10. **The skill saves the document**: into the open target repository's existing
+10. **The skill writes the introduction and the Compatibility section** — the
+    intro from the merged changelog, compatibility from repository sources of
+    truth (`charmcraft.yaml`, `metadata.yaml`, snap/rock metadata, release tags)
+    and the previous release notes' table.
+11. **The skill saves the document**: into the open target repository's existing
     release-notes folder, following its naming convention (asking you if no such
     folder exists); or into `release-notes/` here when this repository is itself
     the workspace. It then deletes the temp drafts.
-11. **The skill verifies the page with the repo's own docs checks** and fixes
+12. **The skill verifies the page with the repo's own docs checks** and fixes
     what they report, re-running until both are green — see
     [Docs checks as the final gate](#docs-checks-as-the-final-gate). It warns
     you first, because `make linkcheck` takes a few minutes.
-12. **The skill reports back**, summarising coverage, highlights, the TODOs left
+13. **The skill reports back**, summarising coverage, highlights, the TODOs left
     for you in the review-notes comment, and every edit it made *outside* the
     new document (wordlist additions, `conf.py` linkcheck exceptions).
 
 The output is a **finished, publishable document** — open items live only in the
 review-notes comment, as imperative TODOs. **Nothing is ever pushed or
 published**; all output stays local.
+
+### The range and the revision number
+
+Three defaults cover almost every run; anything you state explicitly wins over
+all of them:
+
+| What | Default |
+|------|---------|
+| `from-ref` | The **newest release notes already in the repo's docs tree** (usually `docs/reference/release-notes/revision-NNN.md`) — that revision's own tag, *not* that revision + 1 |
+| `to-ref` | The **branch HEAD** — your checked-out branch, or the repo's default branch when targeting another repo |
+| Revision number in the title | The **highest revision number in the repo's tags**; if that tag isn't at HEAD, the first number **no tag or document already uses** |
+
+If you pinned neither end of the range, the skill infers all three and then **asks
+you to confirm or override them** before generating — so a wrong inference costs
+you one word, not a regenerated document.
+
+You can pin either end, or both. Whichever you leave open keeps its default:
+
+| You say | `from-ref` | `to-ref` | Title revision |
+|---------|-----------|----------|----------------|
+| nothing (just the repo) | newest documented revision | branch HEAD | from the tags — confirmed with you |
+| "from 301" | `rev301` | branch HEAD | from the tags — confirmed with you |
+| "to 314" | **the release before 314** | `rev314` | **314** |
+| "from 299 to 399" | `rev299` | `rev399` | **399** |
+
+Naming a `to` revision sets the title: the document ends at that release, so it
+*is* that revision. And "to" alone deliberately does **not** keep the default
+`from` — the newest documented revision is usually *later* than your `to`, which
+would invert the range into silence (`rev315..rev314` yields zero commits and an
+empty document). The skill walks back to the release before your `to` instead,
+skipping a per-architecture pair-mate, since a pair shares a commit and would
+also yield nothing.
+
+Revision numbers are resolved to real tags and commits, never assumed. Two cases
+get put back to you with options rather than guessed:
+
+- **No such revision** — "to 399" when the highest tag is `rev366`. You're offered
+  the nearest revisions below and above; a neighbour is never silently
+  substituted, since an off-by-one shifts every entry in the document.
+- **An ambiguous revision** — a repo that tags several charms can carry the same
+  number twice at *different* commits (`rev9` and `opensearch-k8s/rev9` are
+  unrelated releases; 11 numbers are duplicated this way in
+  `opensearch-operator`). Both tags are listed with their commits so you can pick.
+
+The revision number needs a separate source because the docs can't supply it:
+when this was written, `opensearch-operator` documented up to revision 315 while
+its tags had reached 366 — a 50-release gap. And it's load-bearing, since it also
+sets the filename, the MyST anchor and the Compatibility table's revision column.
+
+**Why `from-ref` isn't "documented + 1".** The range is already *exclusive* of
+`from-ref`, so `rev315..HEAD` begins at the first commit after the release that
+`revision-315.md` documents — incrementing first would apply that offset twice.
+And because revisions are allocated in per-architecture pairs, consecutive numbers
+often point at the **same commit**: `rev316..rev317` is *empty* where
+`rev315..rev317` covers 2 commits. In `opensearch-operator`, 66 of 225 consecutive
+revision pairs share a commit, so a `+1` default would silently swallow a release
+roughly a third of the time.
+
+One command answers all three — one request, no auth, no pagination, and it
+returns the branch heads alongside the tags:
+
+```bash
+git ls-remote --tags --heads https://github.com/canonical/opensearch-operator.git
+```
+
+Then take the numerically highest `rev<N>` tag. Four things go wrong if you don't:
+
+| Trap | Why it bites |
+|------|--------------|
+| `gh api .../tags --jq '.[0:5]'` | That endpoint orders refs **lexicographically** — not by date, not by revision number — so a top-N slice is "the tags whose names sort highest" |
+| `rev9` vs `rev100` | String ordering puts `rev9` first; revision numbers must be compared numerically |
+| Tags may be **namespaced per charm** (`opensearch/rev366`, `opensearch-k8s/rev16`) alongside stale flat `revNNN` tags | Since `r` sorts after `o`, every legacy flat tag sorts ahead of every `opensearch/*` tag, so a slice never sees the live series. No namespace ranking is needed to fix this — revision numbers are monotonic, so the flat series stops where namespacing began and the plain maximum is right anyway |
+| Release tags are **annotated** | `git ls-remote` emits a second `<ref>^{}` line with the real commit. Comparing the ref's own SHA to a branch head never matches, silently turning a HEAD-tagged release into "latest + 1" |
+
+Namespaces still matter for two things: API calls need the **full ref**
+(`git/refs/tags/opensearch/rev366` — a 404 on a bare `revNNN` means the ref name
+is wrong, not that the tag is missing), and the Compatibility table needs a
+**specific charm's** number, so filter the tag list by its namespace.
+
+Two more rules the skill applies:
+
+- **A tag at HEAD means the release *is* that revision** — it has already been
+  cut and tagged, so the document is titled with that number, not latest + 1.
+  When the tag is *behind* HEAD, the next number is only a proposal: revisions
+  are allocated in **per-architecture pairs** (`rev365` and `rev366` are the same
+  commit), so a new release takes a whole pair and the final number may differ.
+  The published convention titles with the higher member of the pair.
+- **Never a revision at or below one already documented.** Before generating, the
+  skill checks the release-notes folder *and its git history* — a correct
+  `revision-366.md` can sit in history while a fresh draft is being numbered 350.
+  If any documented revision is greater than or equal to the inferred one, it
+  stops and asks you. This checks the *conclusion* rather than the inference, so
+  it catches a bad number regardless of what caused it.
+
+**There is no script for this.** It's two commands the agent reads directly —
+deliberately, because the interesting part is the reasoning, not the parsing:
+
+```bash
+# The latest revision: anchor on the rev/revision prefix, take the digits after
+# it, compare numerically.
+git ls-remote --tags --heads https://github.com/<owner>/<repo>.git \
+  | grep -oiE 'rev(ision)?[-_.]?[0-9]+' | grep -oE '[0-9]+$' | sort -n | tail -1
+
+# The newest revision the docs already cover (sort NUMERICALLY, not alphabetically).
+ls docs/reference/release-notes/ | grep -oE '[0-9]+' | sort -n | tail -1
+```
+
+The first command also returns the branch heads, which is what the HEAD check
+below needs — drop the `grep` pipeline to see them.
+
+That parsing rule is more particular than it looks.
+"Strip all the letters and take the biggest number" turns `opensearch-k8s/rev16`
+into **816**, so `opensearch-operator`'s highest "revision" comes out as 816
+rather than 366 — a document titled "Revision 817". Taking runs of *adjacent*
+digits is the fix, and the `rev` anchor is what makes it trustworthy: tag names
+carry all sorts of unrelated numbers. `k8s` is the obvious one (it would
+contribute an `8` that wins in any repo still on single-digit revisions), but so
+are `v4/1.46.0`, `preview7/` and `release-2024-01-15` — that last yields **2024**,
+which beats every real revision. Anchoring on `rev` excludes them all at once
+instead of maintaining a list of things to strip.
+
+Don't try to solve dates by stripping years, either: a `20[0-9][0-9]` filter would
+delete `rev2019`…`rev2099`, and four-digit revisions are already here —
+`postgresql-operator` is at **rev1215**.
+
+Surveyed across 14 Canonical charm repos, **all 14 use `rev`-style tags** and the
+anchored result matched a plain digit-run scan every time — so the anchor costs
+nothing in practice and only guards the edges. If a repo genuinely has no `rev`
+tags, the skill falls back to the biggest adjacent digit run (minus `k8s`) but
+presents it as a suggestion to confirm, since unanchored it can return a date.
+
+The full failure this prevents, with the real ref data, is written up in
+[`examples/Worked-example-namespaced-tags.md`](examples/Worked-example-namespaced-tags.md).
 
 ### Docs checks as the final gate
 
@@ -713,6 +856,7 @@ release-notes-builder/
 ├── examples/
 │   ├── DA186 - Release notes for Data charms.md   # Spec reference
 │   ├── Example-release-notes-spec.md              # PostgreSQL example
+│   ├── Worked-example-namespaced-tags.md          # The rev350-vs-366 failure
 │   └── 205-248.md / 205-248-prs.md / 205-head.md  # Sample generated outputs
 ├── release-notes/                  # Standalone-mode output
 ├── spec/                           # DA186 / DA288 source documents

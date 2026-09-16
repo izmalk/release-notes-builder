@@ -133,9 +133,9 @@ containing `build_release_notes.py`:
    **2** with `*/tools/*: Not found in archive` if the pushed branch predates
    that directory, *even though the other files extracted correctly*. Don't
    treat that non-zero exit as a failed bootstrap: check which files actually
-   landed, and if `tools/check_autolinks.py` is genuinely absent from the
-   remote, say so and fall back to reviewing bare filenames by hand (see step
-   9) instead of skipping the check silently.
+   landed, and if the checker is genuinely absent from the remote, say so and
+   fall back to reviewing bare filenames by hand (see step 9) instead of
+   skipping the check silently.
 
 Then make sure the dependencies are importable — `build_release_notes.py` needs
 `jinja2` and `requests`, and `tools/check_autolinks.py` needs `linkify-it-py`.
@@ -336,25 +336,293 @@ every other source (step 1.3.a). Don't go looking for the last documented
 release: the user has already told you where to start. Two things still need
 care.
 
-**Resolve the name they used to an actual Git ref.** Users say "revision 315"
-or "rev315" or "315"; the repo's tags may be `rev315`, `revision-315`, `315`,
-`v2.1.0` or `2.1.0`. List the repo's tags and match, rather than assuming a
-naming scheme:
+**Resolve the name they used to an actual Git ref.** Users say "revision 315" or
+"rev315" or "315"; the repo's tags may be `rev315`, `revision-315`, `315`,
+`v2.1.0`, `2.1.0` — or `opensearch/rev315`, namespaced per charm. List **all** the
+repo's tags and match, rather than assuming a naming scheme; the mechanics,
+including what to do when a number is missing or ambiguous, are in "Resolving a
+named revision to a commit" below. Also note:
 
-```bash
-gh api "repos/canonical/<repo>/tags" --jq '.[].name' | head -30
-```
-
-- If exactly one tag plausibly corresponds, use it and say which you picked.
-- If a bare number could match several tags (e.g. `rev315` and `315`), or the
-  named revision has no tag at all, ask — don't silently substitute a
-  neighbouring revision. A charm *revision* number is not always a Git tag:
-  some products tag releases by workload version instead, in which case ask
+- A charm *revision* number is not always a Git tag: some products tag releases
+  by workload version instead — `kafka-operator`'s `rev*` tags are frozen at
+  `rev262` while its newest releases are tagged `v4/1.46.0` — in which case ask
   which tag or SHA corresponds to that revision.
-- A 7–40 character hex string is a commit SHA; use it directly.
 - If the ref exists but is **not an ancestor of the resolved branch** (e.g. it
   was tagged on another track), say so and ask, rather than producing a range
   that spans tracks.
+- **Always pass the full ref name to the API.** `compare` and
+  `git/refs/tags/...` calls must use `opensearch/rev366`, not `rev366`. A 404
+  from `gh api repos/{owner}/{repo}/git/refs/tags/rev366` means *the ref name
+  is wrong*, not that the tag is missing — see "Resolving the range and the
+  revision number" below.
+
+## Resolving the range and the revision number
+
+Three defaults cover almost every run. Anything the user states explicitly wins
+over all of them.
+
+| What | Default |
+|------|---------|
+| `from-ref` | The **newest release notes already in the repo's docs tree** (usually `docs/reference/release-notes/revision-NNN.md`) — that revision's own tag, **not** that revision + 1 |
+| `to-ref` | The **branch HEAD** — the currently checked-out branch for the open repo, else the repo's default branch |
+| Revision number in the title | The **highest revision number in the repo's tags**, `+1` if that tag isn't at HEAD |
+
+Two commands produce all three. Read them yourself — there is no script to run:
+
+```bash
+# Every tag and branch head, in one unauthenticated, unpaginated request.
+# Pipe through the parsing rule below to get the latest revision number; read it
+# unpiped to get the branch heads for the HEAD check.
+git ls-remote --tags --heads https://github.com/<owner>/<repo>.git
+
+# The newest revision the docs already cover (sort NUMERICALLY, not alphabetically).
+ls docs/reference/release-notes/ | grep -oE '[0-9]+' | sort -n | tail -1
+```
+
+The revision number needs its own source because the docs can't supply it: when
+this was written, `opensearch-operator` documented up to revision 315 while its
+tags had reached 366 — a 50-release gap.
+
+### Reading the latest revision out of the tag list
+
+Anchor on the **`rev`/`revision` prefix**, take the **run of digits immediately
+after it**, and compare those **numerically**:
+
+```bash
+git ls-remote --tags <url> \
+  | grep -oiE 'rev(ision)?[-_.]?[0-9]+' | grep -oE '[0-9]+$' | sort -n | tail -1
+```
+
+Three properties make that reliable, and each corresponds to a way of getting it
+wrong:
+
+- **A run of *adjacent* digits, not every digit in the string.** Deleting all
+  non-digits from `opensearch-k8s/rev16` yields **816**, making 816 the apparent
+  maximum in `opensearch-operator` instead of 366 — a document titled
+  "Revision 817".
+- **Anchored on the `rev` prefix, not on the end of the name.** An end-anchor
+  (`rev[0-9]+$`) works but is brittle — it breaks the moment a repo appends
+  anything to a tag (`rev366-rc1`, `rev366+arm64`). The prefix is the part that
+  carries the meaning, so it survives suffixes.
+- **Numeric comparison.** `rev9` sorts above `rev100` as a string.
+
+The `rev` anchor is what makes the digit run trustworthy, and it is worth
+preferring over a blocklist of known-noisy substrings. `k8s` is the obvious
+offender — it contains a digit run, so a bare digit-run scan picks up an `8` from
+every `*-k8s/*` tag, which **wins** in any repo whose revisions are still
+single-digit (a dashboards-k8s charm at `rev5` would be titled "Revision 9").
+Stripping `k8s` fixes that, but the same problem recurs with every other numeric
+fragment a tag name can carry — `v4/1.46.0` (→ 46), `preview7/`,
+`release-2024-01-15` (→ **2024**, which beats every real revision). Anchoring on
+`rev` excludes all of them at once, so the list never has to grow.
+
+In particular, **don't strip years to deal with dates.** A `20[0-9][0-9]` filter
+destroys legitimate revisions: `rev2019` … `rev2099` are 81 real revision numbers
+that would silently vanish, and this is not hypothetical —
+`canonical/postgresql-operator` is already at **rev1215** and
+`postgresql-k8s-operator` at rev960, so four-digit revisions are current, not
+future. Anchoring on `rev` handles dates without deleting anything.
+
+The regex tolerates the spellings that occur in practice — `rev366`,
+`revision-366`, `revision366`, `rev_366` — because tag naming is not consistent
+across products. It will also match a `rev` sitting inside a longer word
+(`myrevision42`), which is harmless here: a tag has to be *shaped* like a revision
+to match at all, and if the number it yields looks wrong against the rest of the
+series, that is exactly the case to stop and ask about.
+
+**How often is this anchor actually available?** Surveyed across 14 Canonical
+charm repos (opensearch, opensearch-dashboards, kafka, kafka-k8s, kafka-connect,
+kafka-ui, karapace, postgresql, postgresql-k8s, mysql, mysql-k8s, mongodb,
+mongodb-k8s, spark-k8s-bundle): **all 14 have `rev`-style tags**, and the
+rev-anchored answer matched a plain digit-run scan in all 14. So the anchor costs
+nothing on real data and only protects against the edge cases. Version-style tags
+never won either — revision numbers accumulate far faster than versions (e.g.
+postgresql: rev1215 vs a highest version fragment of 374).
+
+Two junk tags worth knowing about, both harmless to this rule: `revundefined`
+(in `kafka-operator` and `mongodb-operator` — matches `rev` but yields no digits,
+so it drops out) and `edge-v4r4` / `edge-v6r6` (in `mongodb-k8s-operator`).
+
+Two more failure modes, unrelated to parsing:
+
+- **Never use a top-N slice of `/tags`.** `gh api .../tags --jq '.[0:5]'` orders
+  refs **lexicographically** — not by date, not by revision number — so a slice
+  is "the tags whose names sort highest", and it hid a whole live tag series
+  (canonical/opensearch-operator, 2026-09-15: a draft titled "Revision 350" when
+  the answer was 366).
+- **Peel annotated tags before comparing SHAs.** Release tags are annotated, so
+  the ref points at a tag object; `git ls-remote` emits a second `<ref>^{}` line
+  with the actual commit. Comparing the unpeeled SHA to a branch head never
+  matches, which silently turns a HEAD-tagged release into "latest + 1".
+
+### If nothing matches `rev` at all
+
+This didn't occur in any of the 14 repos surveyed, but it is possible — some
+products tag purely by workload version. In that case, *then* fall back to the
+biggest run of adjacent digits, having first dropped `k8s` (the one substring
+guaranteed to inject a spurious digit into charm tag names):
+
+```bash
+git ls-remote --tags <url> | sed 's|.*refs/tags/||;s/k8s//g' \
+  | grep -oE '[0-9]+' | sort -n | tail -1
+```
+
+**Treat that result as a suggestion to confirm, never as the answer.** Unanchored,
+it happily returns a date fragment: on a repo tagged `v1.2.3` /
+`release-2024-01-15` it yields **2024**. Present it alongside the tags it came
+from and let the user correct it.
+
+Also beware the mixed-scheme case, where the anchor *does* match but is stale:
+`kafka-operator` has 170 `rev*` tags frozen at `rev262`, while its 46 newest
+releases are tagged `v4/1.46.0`. The highest `rev` number is real but is **not**
+the latest release, so cross-check against Charmhub or ask.
+
+Tags may be **namespaced per charm** (`opensearch/rev366`, `opensearch-k8s/rev16`)
+in repos where several charms were merged into one codebase, which usually *also*
+still hold the old flat `revNNN` tags. You do **not** need to rank namespaces:
+revision numbers are monotonic per repo, so the flat series stops where
+namespacing began and the plain numeric maximum is right either way. Namespaces
+matter for two things only: use the **full ref** in API calls
+(`git/refs/tags/opensearch/rev366`, not `rev366` — a 404 on a bare `revNNN` means
+the ref name is wrong, not that the tag is missing), and filter by namespace when
+you need a **specific charm's** number for the Compatibility table.
+
+### Is the latest tag *at* the branch HEAD?
+
+If the latest tag's **peeled** commit equals the branch HEAD, the release has
+already been cut and tagged: title the document with **that** revision, not
+latest + 1. Only a tag *behind* HEAD means the document covers the next release.
+Getting this backwards shifts the title, the filename, the anchor and the
+Compatibility table together.
+
+```bash
+refs=$(git ls-remote --tags --heads https://github.com/<owner>/<repo>.git)
+echo "$refs" | awk '$2=="refs/heads/<branch>"'          # the branch head
+echo "$refs" | grep 'rev<N>^{}'                          # the tag's real commit
+```
+
+When the tag is behind HEAD, use `latest + 1` and **leave an imperative TODO in
+the review notes for the release owner to verify the final number**: revisions are
+allocated in **per-architecture pairs** (`opensearch/rev365` and `rev366` are the
+same commit, as are `rev77` and `rev78`), so a new release allocates a whole pair
+and the published number may differ. The convention is to title with the
+**higher** member of the pair.
+
+### Reading the revision out of the docs, for `from-ref`
+
+Prefer the **filename** (`revision-366.md` → 366): it is the most consistent
+signal. Titles vary in wording even within one repo — `# Revision 366` and
+`# Revision 168 release notes` both occur in `opensearch-operator` — so if you
+match on the title, allow trailing words after the number rather than requiring
+the line to end there.
+
+Sort the numbers **numerically**: an alphabetical `ls | tail -1` picks
+`revision-9.md` over `revision-168.md`.
+
+### `from-ref` is the documented revision itself, never that revision + 1
+
+The range is **exclusive of `from-ref`** (see "range direction" below), so
+`rev315..HEAD` already starts at the first commit *after* the release that
+`revision-315.md` documents. Incrementing first applies that offset twice.
+
+This is not a harmless off-by-one. Because revisions are allocated in
+per-architecture pairs, consecutive numbers frequently point at the **same
+commit** — `rev316` and `rev317` both resolve to `10ec9a90`, so `rev316..rev317`
+is **empty** where `rev315..rev317` correctly covers 2 commits. In
+`opensearch-operator`, 66 of the 225 consecutive revision pairs between rev100
+and rev349 share a commit, so a `+1` default would silently swallow a whole
+release about a third of the time. The increment belongs on the **title number**,
+never on `from-ref`.
+
+### The four ways a user can specify the range
+
+Whichever end the user pins, the other keeps its default:
+
+| The user says | `from-ref` | `to-ref` | Title revision |
+|---------------|-----------|----------|----------------|
+| nothing (just the repo) | newest documented revision | branch HEAD | from the tags — confirm it |
+| "from 301" | `rev301` | branch HEAD | from the tags — confirm it |
+| "to 314" | **the release before 314**, *not* the documented default | `rev314` | **314** |
+| "from 299 to 399" | `rev299` | `rev399` | **399** |
+
+Two of these need care:
+
+- **A named `to-ref` sets the title revision.** The document ends at that
+  release, so it *is* that revision — no HEAD check and no "+1".
+- **"to" alone must not keep the default `from`.** The documented default is
+  usually a *later* revision than the user's `to`, which inverts the range into
+  silence: `rev315..rev314` yields **zero commits** and an empty document with no
+  error. Walk back to the release *before* the requested `to` instead — and skip
+  a pair-mate while walking back, since a pair shares a commit and would also
+  produce an empty range.
+
+If the user pins both ends, check the direction: `from` must name an *earlier*
+release than `to`. Whatever range you settle on, **verify it isn't empty** before
+generating — `git rev-list --count <from>..<to>` — because every failure mode
+above shows up as an empty document rather than an error.
+
+### Resolving a named revision to a commit
+
+A charm revision number is **not** a git ref, so match it against the repo's real
+tags rather than assuming `rev<N>` exists. Two things can go wrong, and both must
+be **put to the user with concrete options** rather than guessed:
+
+- **No such tag.** Users name revisions that were never tagged, or that don't
+  exist yet — "to 399" when the highest tag is `rev366`. Offer the nearest tags
+  below and above and let the user choose. Never substitute a neighbouring
+  revision: an off-by-one here shifts every entry in the document.
+- **The number is ambiguous.** A repo that tags several charms can carry the same
+  number twice at *different commits* — `rev9` and `opensearch-k8s/rev9` are
+  unrelated releases of unrelated charms (11 numbers are duplicated this way in
+  `opensearch-operator`). List both tags with their commits and ask which is
+  meant. Two tags on the *same* commit are just a naming artefact, not a real
+  choice — take the namespaced one.
+
+```bash
+# Everything carrying a given revision number, with the commit each resolves to.
+git ls-remote --tags https://github.com/<owner>/<repo>.git | grep -E 'rev<N>(\^\{\})?$'
+```
+
+A 7–40 character hex string is a commit SHA and needs none of this; use it
+directly.
+
+### When the user pinned neither end, propose and confirm
+
+If the request named no revisions, infer all three values, then **put them to the
+user for confirmation or override before generating** — one short message, with
+the reasoning visible so a wrong inference is obvious at a glance:
+
+```text
+  from-ref:  rev315   <- newest documented release notes (revision 315)
+             (exclusive: the document starts at the next commit)
+  to-ref:    opensearch/rev366 (branch HEAD)
+  revision:  366   <- opensearch/rev366 is at the branch HEAD, so this release is
+                      already tagged
+```
+
+Batch this with the other step-1 questions (sibling components, auto-sort) rather
+than sending it on its own. If the user confirms, proceed; if they override any
+value, use theirs verbatim. Record both the inference and their answer in the
+review notes.
+
+### Never generate a revision at or below one already documented
+
+Before finalising the number, check what the repo already documents:
+
+```bash
+ls docs/reference/release-notes/            # or the repo's own notes folder
+git log --all --name-only --pretty=format: -- docs/reference/release-notes
+```
+
+The git-history half matters: a correct `revision-366.md` can exist in history
+(or on another branch) while a fresh draft is being numbered 350. **If any
+documented revision is greater than or equal to your number, stop and ask the
+user** — do not generate, and do not overwrite. This checks the *conclusion*
+rather than the inference, so it catches a bad revision number regardless of
+what caused it. Present the conflicting file(s) and ask whether to document a
+later revision, update the existing document, or use a different `from-ref`.
+
+## Starting from a revision the user names: range direction
 
 **The range is exclusive of `from-ref` and inclusive of `to-ref`.** The builder
 reports changes *after* `from-ref`, so "from revision 315" produces the release
@@ -632,6 +900,15 @@ involved. Follow these rules:
   — for repos where (a)/(b) genuinely failed, and even then fetch the
   *single* release-notes page for the resolved track, not every revision
   page across every track/branch.
+- **List tags completely and cheaply — never a top-N slice.** Use
+  `git ls-remote --tags --heads https://github.com/<owner>/<repo>.git` (one
+  call, no auth, no pagination, and it returns the branch heads in the same
+  response so the HEAD check below is free), or
+  **Do not** use
+  `gh api repos/{owner}/{repo}/tags --jq '.[0:5]'`: that endpoint orders refs
+  *lexicographically*, not by date or revision number, so a slice is not "the
+  newest few tags" — it is "the tags whose names sort highest". See "Resolving
+  the range and the revision number" for the real-world failure this caused.
 - **Don't reverse-engineer arch→revision mapping from CI logs.** Fetching
   GitHub Actions workflow runs, then jobs, then full logs, then grepping
   them (per repo, per track) is by far the most expensive way to learn which
@@ -664,8 +941,13 @@ involved. Follow these rules:
 | Previous release notes link | — (optional alternate to naming repos) | A URL to an already-published release-notes page (e.g. a `revision-NNN` docs page); resolves product, track, from-ref, and component list — see "Starting from a link to previously published release notes". The open repo's own newest release-notes file serves the same purpose automatically |
 | Track | The documentation's default track (see above) | Ask if it can't be determined |
 | Branch | The track's branch (repo default branch if single-track product) | Resolve via GitHub API |
-| From-ref | Step 1.3's priority order: user-specified → latest ancestor tag → last documented release → first commit (first release) → ask | Tag/SHA/branch, or a revision/version the user names — see "Starting from a revision, version, tag or commit the user names" |
-| To-ref | HEAD of the branch | Tag/SHA/branch |
+| From-ref | **The newest release notes already in the repo's docs tree** (that revision's tag, *not* +1); then the docs site, then the latest ancestor tag, then the first commit (first release), then ask | Tag/SHA/branch, or a revision/version the user names — see "Resolving the range and the revision number" |
+| To-ref | **HEAD of the branch** — the checked-out branch for the open repo, else its default branch | Tag/SHA/branch |
+| Revision number (title) | **The highest revision number in the repo's tags**; that revision if the tag is at HEAD, else the first number no tag or document already uses | The docs can't supply this — tags routinely run dozens of revisions ahead of published notes |
+
+When the user pinned **neither** end of the range, infer all three and **put them
+to the user for confirmation or override** before generating (see "When the user
+pinned neither end, propose and confirm").
 | Product name / title | Derived from repos | e.g. "Charmed Apache Kafka" |
 | Auto-sort | **Off** | Reclassify the "Other improvements" catch-all by conventional-commit prefix. Ask once if not specified; the user can say "auto-sort on/off" — see "Auto-sort" above |
 | Output file | See step 8: the target repo's existing release-notes location when run cross-repo, else `release-notes/<product>-<to-ref>.md` | Ask the user if no existing location can be found in the target repo |
@@ -708,17 +990,24 @@ repo-by-repo:
       request. Resolve the name to a real tag and settle the
       inclusive/exclusive question per "Starting from a revision, version,
       tag or commit the user names" above.
-   b. The most recent tag/release that is an ancestor of the branch: list
-      the latest few tags for all repos in one loop
-      (`gh api repos/{owner}/{repo}/tags --jq '.[0:5]'`), then confirm
-      ancestry with one `compare` call per candidate tag — stop at the first
-      one that's an ancestor.
-   c. Only for repos where (b) didn't resolve: the last documented release
-      in the product's documentation — prefer the **newest release-notes file
-      in the currently open repo's own docs tree** (no network needed, and
-      it's the product's own source of truth), else fetch the *one*
-      release-notes page for the resolved track (not other tracks) from the
-      docs site. Use the revision/tag it documents.
+   b. **The default:** the newest release notes already published in the
+      product's documentation — the newest release-notes file in the repo's
+      own docs tree (`docs/reference/release-notes/`), which needs no network
+      and is the product's own record of what has been documented. Failing
+      that, fetch the *one* release-notes page for the resolved track (not
+      other tracks) from the docs site. Use the revision/tag it documents.
+   c. Only for repos where (b) didn't resolve: the most recent tag that is an
+      ancestor of the branch. List **every** tag for all repos in one loop —
+      never a top-N slice of `/tags` (see "Resolving the range and the revision
+      number"):
+      ```bash
+      for r in repo1 repo2 repo3; do
+          echo "== $r"
+          git ls-remote --tags --heads "https://github.com/canonical/$r.git"
+      done
+      ```
+      Then take the numerically highest revision, and confirm ancestry with one
+      `compare` call per candidate tag — using the **full namespaced ref**.
    d. If the product has no release notes and no tags at all, treat it as a
       first release — see "First release: a product with no release notes
       yet" above — and confirm the starting point with the user.
@@ -756,6 +1045,18 @@ repo-by-repo:
    e. Record in the review notes which components were added this way (and
       that the user confirmed them, and supplied the repo address if it
       wasn't auto-mapped) or explicitly declined.
+5. **Settle each component's title revision, then guard it.** For every
+   component in scope, take the numerically highest revision tag and decide
+   whether it is *at* the branch HEAD — in which case the release IS that
+   revision — or *behind* it, in which case use the first number no tag or
+   document already uses (proposed, not confirmed). Each charm has its own
+   revision series, so do this per component; never carry the primary charm's
+   number across to a sibling. Then run the discrepancy check in "Never
+   generate a revision at or below one already documented" against the repo's
+   release-notes folder **and its git history**, and stop to ask the user if
+   anything at or above your number is already documented. Finally, if the user
+   pinned neither end of the range, put the inferred `from-ref`/`to-ref`/revision
+   to them for confirmation. See "Resolving the range and the revision number".
 
 Record which source was used for each repo — it goes into the review notes.
 If a repo's default branch is a single-track repo (e.g. `spark-k8s-toolkit-py`
@@ -983,15 +1284,20 @@ ensure it is correct and up to date:
   says otherwise.
 - For each component: charm revision (from the `to-ref` tag, e.g. `rev248`,
   or from the repo's latest release), hardware architecture, workload/rock/snap
-  versions, and minimum/recommended Juju version.
+  versions, and minimum/recommended Juju version. Take the revision from the
+  component's **own** tag series (filter the tag list by its namespace) — not
+  from a flat legacy tag and not from another charm's series in the same repo.
 - Sources of truth: the repo's `charmcraft.yaml` (`platforms`/`bases`),
   `metadata.yaml`, `snapcraft.yaml` or rock's `rockcraft.yaml`, the release
   tag's assets, and the previous release notes' compatibility table (bump
   what changed).
-- **Cheap arch→revision pairing**: for charms/snaps released per-architecture,
-  take the latest two consecutive tag numbers on the branch as the AMD64/ARM64
-  pair by default (see "Keep data gathering lean") instead of confirming via
-  workflow logs. Mark the pairing as a TODO for the release owner to verify.
+- **Cheap arch→revision pairing**: charms released per-architecture allocate
+  revisions in pairs, and both tags point at the **same commit** — so read the
+  pairing straight off the peeled SHAs in `git ls-remote` output rather than
+  mining workflow logs (see "Keep data gathering lean"). Two tags sharing a
+  commit are the AMD64/ARM64 pair; `opensearch/rev365` and `rev366` are one
+  release. Tags in *different* namespaces are different charms, never a pair.
+  Mark the arch→number assignment within the pair as a TODO to verify.
 - If a value cannot be determined from the repo, **ask the user for it** —
   batched with your other questions in step 7 — rather than guessing. Only
   fall back to a clearly marked `TODO`, flagged in the review notes, for
@@ -1021,6 +1327,26 @@ Always query the user for a preferred resolution when:
 - A suspicious entry appears (e.g. a revert without its original, a merge
   commit listed as a change, an entry whose message contradicts its PR).
 - Compatibility values are missing and cannot be derived from the repo.
+- **The user pinned neither end of the range** — infer `from-ref`, `to-ref` and
+  the revision number, then confirm all three in one message before generating
+  (see "When the user pinned neither end, propose and confirm"). This is a
+  confirmation, not an open question: propose concrete values with their
+  reasoning, so the user can simply agree.
+- **A revision the user named has no tag** — list the nearest existing revisions
+  below and above (and the newest), and ask which they meant. Never silently use
+  a neighbour (see "Resolving a named revision to a commit").
+- **A revision the user named matches several tags at different commits** — list
+  each tag with its commit and ask which charm's series is meant.
+- **The user's `from` is not earlier than their `to`** — the range would be
+  inverted or empty; offer to swap them rather than generating an empty document.
+- **The inferred title revision is not ahead of every revision the repo already
+  documents** (see "Never generate a revision at or below one already
+  documented") — stop and ask; never generate over or under an existing
+  release-notes document.
+- **A repo tags several charms and it isn't clear which series a component's
+  revision should come from** — ask rather than picking one, since the wrong
+  choice mis-numbers that component (see "Resolving the range and the revision
+  number").
 - One or more sibling components were detected in the product's previous
   release notes but weren't named by the user (step 1.4.b) — always ask,
   never include them by default.
@@ -1473,6 +1799,55 @@ Verify the final document against the spec before saving:
       branch, and applied exclusively (the document covers the release *after*
       it) — unless the user meant to document that release itself, which was
       confirmed rather than assumed.
+- [ ] The revision number came from a **complete** tag listing
+      (`git ls-remote --tags`), never from a top-N slice of `gh api .../tags`,
+      and was chosen by matching the **`rev`/`revision` prefix plus its adjacent
+      digit run** and comparing those **numerically** — not by flattening whole ref
+      names, and not by scanning for any digit run anywhere in the name (`k8s`,
+      `v4/1.46.0` and `release-2024-01-15` all contribute stray numbers, the last
+      of which beats every real revision). Years were **not** stripped to deal
+      with dates — that would delete real four-digit revisions, and
+      `postgresql-operator` is already at rev1215. If the repo genuinely had no
+      `rev` tags, the digit-run fallback was presented to the user as a suggestion
+      rather than used silently. See "Reading the latest revision out of the tag
+      list".
+- [ ] The resolved range is non-empty: `git rev-list --count <from>..<to>`
+      returns more than zero. Every failure mode in this area surfaces as an
+      empty document rather than an error.
+- [ ] Every `compare` / `git/refs/tags` API call used the full namespaced ref
+      (e.g. `opensearch/rev366`). A 404 on a bare `revNNN` was treated as a
+      wrong ref name and followed up by searching for namespaced variants —
+      never as evidence that the tag doesn't exist.
+- [ ] The latest tag's **peeled** commit was compared to the branch HEAD, and
+      the title revision follows from the result: that revision if the tag is at
+      HEAD, otherwise the first number no tag or document already uses — left as
+      a TODO to confirm, since revisions are allocated in per-architecture pairs
+      (see "Is the latest tag *at* the branch HEAD?").
+- [ ] `from-ref` is the newest documented revision **itself**, not that revision
+      + 1: the range is already exclusive of `from-ref`, and consecutive
+      revisions often share a commit, so a `+1` would silently drop a release
+      (see "`from-ref` is the documented revision itself").
+- [ ] If the user pinned neither end of the range, the inferred `from-ref`,
+      `to-ref` and revision number were **put to the user for confirmation or
+      override** before generating — batched with the other step-1 questions —
+      and both the inference and their answer are recorded in the review notes.
+- [ ] Every revision **number** the user named was resolved to an actual tag and
+      commit; a number with no tag, or one matching several tags at different
+      commits, was put to the user with concrete options rather than resolved to
+      a neighbour or to one arbitrary match (see "Resolving a named revision to a
+      commit").
+- [ ] If the user named only a `to` revision, `from-ref` was taken from the
+      release *before* it — not from the newest documented revision, which is
+      usually later and would invert the range into an empty document (see "The
+      four ways a user can specify the range").
+- [ ] The resolved range is non-empty and runs forwards: `from-ref` names an
+      earlier release than `to-ref`.
+- [ ] The repo's release-notes folder **and its git history** were checked for
+      already-documented revisions, and generation stopped for the user's
+      decision if any documented revision was greater than or equal to the
+      inferred one (see "Never generate a revision at or below one already
+      documented"). No existing release-notes document was overwritten or
+      contradicted.
 - [ ] If this is the product's first release-notes document, that was verified
       across the repo, the docs site and `$BUILDER_HOME/release-notes/` and
       stated in the review notes; `base.md.j2` was used deliberately (not as a
