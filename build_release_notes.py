@@ -99,11 +99,22 @@ JIRA_TICKET_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
 # Prefixes that match JIRA_TICKET_RE but are NOT Jira ticket IDs, so they must
 # never be linked as one. CVE (Common Vulnerabilities and Exposures) IDs are
 # the most common false positive here (e.g. "CVE-2026" in a dependency-bump
-# PR title, from the truncated "CVE-YYYY-NNNNN" scheme). Other known false
-# positives (SHA-256, UTF-8, ISO-8601, SCTE-35, ...) are still possible and
-# should be flagged/dropped manually when merging — this list only covers
-# patterns common enough to filter automatically.
-NON_JIRA_PREFIXES: frozenset[str] = frozenset({"CVE"})
+# PR title, from the truncated "CVE-YYYY-NNNNN" scheme). The others are
+# technical standards/encodings (SHA-256, UTF-8, ISO-8601, SCTE-35, ...) that
+# appear in dependency-bump PR bodies and were verified as false positives in
+# real PostgreSQL runs (SAY-5 and RM-37983 also appeared there and are
+# included below). Extend this list when a new systematic false-positive
+# prefix is observed rather than special-casing it by hand every time.
+NON_JIRA_PREFIXES: frozenset[str] = frozenset({
+    "CVE",
+    "SHA",
+    "UTF",
+    "ISO",
+    "SCTE",
+    "RFC",
+    "SAY",
+    "RM",
+})
 
 # GitHub compare API returns at most 250 commits per response.
 GITHUB_COMPARE_LIMIT = 250

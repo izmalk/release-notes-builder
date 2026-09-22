@@ -1,0 +1,93 @@
+{# Charmed PostgreSQL release notes template.
+
+   Reproduces the structure of the product's published release notes, most
+   recently VM revisions 1157/1158 and K8s revisions 926/927:
+   https://canonical-charmed-postgresql-single-kernel.readthedocs-hosted.com/16/release-notes/
+   source: canonical/postgresql-single-kernel-library, branch 16/docs,
+           docs/release-notes/vm/1157-1158.md and docs/release-notes/k8s/926-927.md
+
+   Differences from base.md.j2, and why:
+   - MyST frontmatter with `html_meta.description` and a `(rev-NNNN-NNNN)=`
+     anchor, as the docs build requires (the newest VM page 1157-1158.md lacks
+     the frontmatter block — that is a gap in that file, not a convention;
+     1088-1089.md and 926-927.md both carry it). The frontmatter must end up
+     on line 1 of the saved file: if a review-notes HTML comment is added, it
+     goes AFTER the frontmatter block. Otherwise Sphinx parses the `---`
+     fences as body transitions and warns "Document headings start at H2, not
+     H1".
+   - Title is `# Revisions N, M` — the per-architecture revision pair, higher
+     number first (the docs site supplies the product name via the `{{vm}}` /
+     `{{k8s}}` substitution, which the docs build resolves; keep it verbatim
+     on the line after the title).
+   - No date line: none of the product's release-notes pages show a date.
+   - Intro links use a MyST `{card}` directive with `{ref}` cross-references
+     (`system-requirements`, `deploy`, `How to upgrade <refresh>`, and the
+     per-charm index `release-notes-vm` / `release-notes-k8s`), not absolute
+     URLs.
+   - Compatibility table comes FIRST (before the changelog), with columns
+     Architecture / Charm revision / Snap version (VM) or OCI image (K8s) /
+     PostgreSQL version / Recommended Juju version, and a link-reference
+     definition for the Juju version. The agent fills it per charm — the
+     builder's generic table is not used.
+   - Category headings render at `##` and the product uses its own section
+     names: "Highlights" (hand-picked headline entries), then DA186-style
+     "Features" / "Other features and improvements" / "Bug fixes". Map the
+     builder's "Other improvements" to "Other features and improvements".
+   - Entries use `* ` bullets, wrap Jira IDs in square brackets, and link the
+     PR inline as `in {octicon}`mark-github` [#N](url)` — no `([PR \#N](url))`
+     suffix, no commit link.
+   - The product's pages end with a "New Contributors" section and a
+     "Full Changelog" compare link; the agent adds these in the polish pass
+     (the builder cannot know contributor firsts).
+#}
+{% extends "base.md.j2" %}
+
+{% block frontmatter %}
+---
+myst:
+  html_meta:
+    description: "Release notes for Charmed PostgreSQL {{ title }}, TODO: one-sentence summary of the headline changes."
+---
+
+(rev-{{ title | lower | replace(" ", "-") | replace(",", "") }})=
+{% endblock %}
+
+{% block date_line %}{% endblock %}
+
+{% block title %}
+# {{ title }}
+{{ component_subst }}
+{% endblock %}
+
+{% block introduction %}
+
+<!-- TODO: Write a brief summary of the most important changes in this release. -->
+
+{% block intro_links %}
+```{card}
+:text-align: center
+
+[Charmhub]({{ charmhub_url }}) • {ref}`system-requirements` • {ref}`deploy` • {ref}`How to upgrade <refresh>` • {ref}`All release notes <{{ release_notes_ref }}>`
+```
+{% endblock %}
+{% endblock %}
+
+{% block changelog %}
+{% for category in category_order %}
+{% if categories.get(category) %}
+
+## {{ category }}
+
+{% for entry in categories[category] %}
+* {% if entry.jira_ids %}{% for jira in entry.jira_ids %}[{{ jira }}](https://warthogs.atlassian.net/browse/{{ jira }}){% endfor %} {% endif %}{{ entry.message }}{% if entry.pr_number %} in {octicon}`mark-github` [#{{ entry.pr_number }}]({{ entry.pr_url }}){% endif %}
+
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endblock %}
+
+{% block compatibility %}
+<!-- TODO: The agent fills the product's own compatibility table here
+     (Architecture / Charm revision / Snap or OCI version / PostgreSQL
+     version / Recommended Juju version), placed BEFORE the changelog. -->
+{% endblock %}
