@@ -102,12 +102,14 @@ Charmhub: [TODO/stable](https://charmhub.io/kyuubi-k8s?channel=TODO/stable) | [D
 {% endif %}
 {% endfor %}
 
+{% if not exclude_docs %}
 ## Documentation improvements
 
 The current release also features the following documentation changes:
 
 <!-- TODO: move the documentation-only entries here from the Enhancements
 section above; delete this section if the release has none. -->
+{% endif %}
 {% endblock %}
 {% block security %}
 

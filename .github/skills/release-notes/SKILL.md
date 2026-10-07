@@ -1,7 +1,7 @@
 ---
 name: release-notes
 description: 'Generate DA186-compliant release notes for Canonical Data & AI charms. Use when the user asks to "generate release notes", "create release notes", "compile a changelog", "prepare release notes draft", or a similar phrasing/verb — including bare requests with no repository, product, or ref named at all ("generate release notes", "write the next release notes"), which mean the currently open repository, with the product, refs and components auto-detected from its own docs. Also accepts one or multiple charm repositories (e.g. canonical/kafka-operator), a link to a previously published release-notes page, or an explicit starting point named as a revision, version, tag or commit SHA ("since rev247", "from 2.1.0", "changes after revision 315"), optionally for a branch, track, or a commit range. Handles a product''s very first release notes, where no previous notes exist to build on. Gathers changes via GitHub API, discovers sibling components from prior release notes, merges multi-repo notes into a single product draft, writes intro and compatibility sections, and saves the result locally for review. Never publishes anything.'
-argument-hint: '[repo ...] [--track TRACK] [--branch BRANCH] [--from-ref REF] [--to-ref REF] [auto-sort on|off]'
+argument-hint: '[repo ...] [--track TRACK] [--branch BRANCH] [--from-ref REF] [--to-ref REF] [auto-sort on|off] [exclude docs|renovate|both]'
 ---
 
 # Release Notes Generation (DA186)
@@ -46,6 +46,9 @@ repository.
   (opts in to reclassifying the "Other improvements" catch-all by
   conventional-commit prefix; `auto-sort off` opts out — see "Auto-sort"
   below, which is off unless enabled)
+- "Generate release notes excluding documentation changes and Renovate bot
+  changes" (opts in to the independent changelog exclusion filters; either
+  kind may be requested alone — see "Opt-in changelog exclusions" below)
 
 ## Installing and running this skill
 
@@ -881,6 +884,80 @@ be able to reverse any single decision without re-deriving it.
 
 If auto-sort moves nothing, say so explicitly rather than omitting the note.
 
+## Opt-in changelog exclusions: documentation and Renovate
+
+Documentation and Renovate filtering are **independent and off by default**.
+Only enable a filter when the user explicitly asks to *omit/exclude/filter out*
+that kind of change from the release notes (for example, "exclude docs
+changes", "omit Renovate bot PRs", or "filter out docs and Renovate").
+Mentions of documentation, dependency bumps or Renovate in a product summary
+are not requests to exclude them. Do not offer filtering unsolicited or treat
+auto-sort as a filtering opt-in. If the user's wording is ambiguous, ask which
+kind(s) to exclude before generating. "Exclude dependencies" is not the same
+as "exclude Renovate": confirm scope rather than silently excluding other
+bots or human dependency updates. On no-opt-in runs, do not pass exclusion
+flags and **do not run the AI exclusion review** described below.
+
+- `--exclude-docs` omits an entry only when complete GitHub changed-file
+  listings for **both the selected PR and the individual commit** show all
+  changed paths are documentation: the `docs/`, `doc/`,
+  `documentation/`, `releases/` or `release-notes/` trees (including assets and
+  docs build configuration), or selected root prose pages such as `README.md`,
+  `SECURITY.md`, `CONTRIBUTING.md` and `CHANGELOG.md`. A rename must have both
+  old and new paths in scope. `docs:` in the title or a `documentation` label
+  is merely a review hint, not enough to delete. Keep mixed code/docs entries,
+  unknown paths, and entries whose files could not be fetched completely.
+  A PR's net diff may hide code changes in one of its commits, so checking
+  only PR files is not sufficient. A failed PR association lookup also keeps
+  that commit instead of treating it as confidently PR-less.
+- `--exclude-renovate` omits entries with verified Renovate bot GitHub login
+  (`renovate[bot]` or `renovate-bot`). This also excludes bot-authored security
+  fixes when requested; report that risk to the user. A human-authored change
+  to `renovate.json`, a title that says "Renovate", and an unverified bot
+  display name do not qualify. Commit-only entries need matching GitHub bot
+  author **and** committer logins plus a verified valid commit signature;
+  otherwise keep them for review.
+- These filters apply per **commit entry**, even if several commits share a PR;
+  they do not fetch or filter GitHub Issues. The script prints each exclusion
+  as informational stderr output (not an error; exit code stays zero) and,
+  when given `--exclusions-report <path>`, writes JSON counts, item links,
+  reasons, and uncertain retained entries. Fail-open missing metadata is not
+  proof that no qualifying changes remain.
+
+### Agent verification, only after explicit filtering opt-in
+
+In step 3, pass only the chosen flag(s) to *every* per-repo builder run and
+save a separate JSON report alongside each temporary draft. In step 4,
+**before merging or writing the introduction**, read each report and verify
+its excluded entries for contradicted evidence; restore an entry from source
+data if the proposed exclusion is demonstrably wrong, noting the correction.
+Then inspect every *remaining* changelog entry (not just `retained_for_review`)
+for in-scope docs or Renovate misses. Consult linked PRs/commits and changed
+files when needed. AI may remove an additional entry only when it can state
+concrete, high-confidence evidence for the requested filter; never delete a
+mixed change, an ambiguous entry, generic CI noise, another dependency bot,
+or human Renovate maintenance just because the title looks similar. Keep and
+flag uncertain candidates for the release owner's review. Check all product
+sections, including any documentation-specific section emitted by a custom
+template; omit sections/categories/components left without changelog entries.
+If neither filter was requested, do none of this review or removal.
+
+For each filtered run, reconcile **raw commit entries = kept + deterministic
+exclusions + AI exclusions + separately documented duplicate removals**, per
+component. In the top review-notes comment (after frontmatter), list the
+requested filters, per-component counts, **every** deterministic and AI
+exclusion with original title, PR/commit link, stage and evidence, restored
+entries, and any kept uncertainty. In the final chat report, summarize the
+deterministic exclusions and enumerate **every AI deletion** with component,
+title, link and reason (explicitly say "none" if there were none), so the
+release owner can verify/reinstate them. Do not leave the only copy of this
+information in temporary JSON reports; read them before deleting temp files.
+
+**DA186 exception:** DA186 requires the full list, including documentation.
+Filtering intentionally departs from that requirement. State this in the
+review-notes comment and final chat, **not** in published prose. Never imply
+that the filtered list is exhaustive; human verification remains necessary.
+
 ## Keep data gathering lean
 
 The reference-resolution phase (step 1) is the easiest place to burn an
@@ -1148,6 +1225,8 @@ python "$BUILDER_HOME/build_release_notes.py" \
     --template "$BUILDER_HOME/templates/base.md.j2" \
     --title "<Component name>" \
     --use-prs \
+    [--exclude-docs] [--exclude-renovate] \
+    [--exclusions-report "$TMPDIR_DRAFTS/<repo>-exclusions.json"] \
     --output "$TMPDIR_DRAFTS/<repo>-draft.md"
 ```
 
@@ -1157,13 +1236,25 @@ Notes:
   `templates/base.md.j2` is only appropriate for a product with no published
   release notes to model on.
 - `--use-prs` gives cleaner entries (PR titles) — prefer it.
+- Add `--exclude-docs` and/or `--exclude-renovate` only when explicitly
+  requested; for either opt-in, **always** provide `--exclusions-report` with
+  a unique path per repo and keep the JSON until the step-4 audit is recorded.
+  Do not add either flag on unfiltered runs (see "Opt-in changelog exclusions").
 - If the script warns that the commit range was **truncated** (>250 commits),
   re-run with `--from-ref <last-sha>` for the remainder and merge the two
-  outputs, or ask the user how to proceed.
+  outputs, or ask the user how to proceed. Give **each range chunk** its own
+  uniquely named draft AND exclusions report (e.g. `repo-part-1`,
+  `repo-part-2`); the script overwrites an existing report path. Reconcile
+  all chunk reports before deleting any of them.
 - If a repo has no changes in the range, skip it and note that in the review
   notes.
 
 ### 4. Merge the drafts and polish the changelog
+
+If and only if documentation and/or Renovate exclusion was explicitly
+requested, perform the agent verification in "Opt-in changelog exclusions"
+**now**, using each repo's draft and exclusion report. Never silently turn
+this into a general cleanup pass. Only then merge retained entries.
 
 Read every per-repo draft directly (they are short — typically well under
 200 lines each) and merge + polish them **in a single pass**. Do not use a
@@ -1232,7 +1323,8 @@ altering the facts**:
   it by hand every time.
 - **Noise**: entries like "sync with k8s", "rename tests", CI-only churn —
   keep them (they belong in "Other improvements") but consider grouping
-  trivial docs/CI entries; never delete a change outright.
+  trivial docs/CI entries; never delete a change outright **unless** it
+  qualifies under an explicitly requested docs/Renovate exclusion as above.
 - **Formatting**: broken Markdown links, stray `\[[` escapes, empty
   parentheses, trailing whitespace, entries missing PR links.
 - **Code-like tokens**: wrap filenames, modules, CLI flags and config keys
@@ -1480,7 +1572,9 @@ rather than leaving it as an aside — don't accumulate stale TODOs.
      needed): keep the existing default,
      `release-notes/<product>-<to-ref>.md` at the repo root.
 2. Delete the temporary per-repo drafts directory created in step 3 (the
-   system temp dir) — never leave scratch files behind in either repo.
+  system temp dir) **only after** copying all exclusion decisions from its
+  JSON reports into the review-notes comment and chat summary — never leave
+  scratch files behind in either repo.
 3. Present the file to the user with a short summary of:
    - Which repository and folder it was saved into, and why (mirrored an
      existing folder's convention, or asked and used the user's answer).
@@ -1488,6 +1582,11 @@ rather than leaving it as an aside — don't accumulate stale TODOs.
    - Categories with notable highlights.
    - Any TODOs left in the review-notes comment for the user (compat values,
      links, flagged entries) — phrased imperatively, per the rule above.
+   - If filtering was requested, the filters used, a per-component count of
+     deterministic removals, and an itemised list of **all** additional AI
+     removals (component, title, link, reason), including an explicit "none"
+     when the AI removed nothing. Mention the intentional DA186 full-list
+     exception and retained uncertain cases for human review.
 
 ### 9. Verify with the repo's own docs checks
 
@@ -1748,7 +1847,9 @@ Verify the final document against the spec before saving:
       and the exact date follows it.
 - [ ] Introduction: brief summary + Charmhub / upgrade / deploy / system
       requirements links.
-- [ ] List of changes: full list since previous stable release, distributed
+- [ ] List of changes: full list since previous stable release (or, **only on
+  explicit opt-in**, the audited list after requested docs/Renovate
+  exclusions; note the DA186 exception in review notes and chat), distributed
       among categories (Features, Breaking changes, Security, Bug fixes,
       Other improvements — or the product template's equivalents); each entry
       links a PR and/or commit; empty categories omitted.
@@ -1781,6 +1882,12 @@ Verify the final document against the spec before saving:
       unless enabled (see "Auto-sort"). If it ran, every move is listed in
       the review notes with its evidence, and no entry was moved across
       component boundaries or edited in the process.
+    - [ ] Docs/Renovate exclusions ran only for the requested type(s); on an
+      unfiltered run neither script filter nor AI exclusion review ran. On a
+      filtered run the per-repo JSON reports were read before deletion; raw,
+      kept, excluded and deduplicated entries reconcile; uncertain entries
+      were retained; every deterministic/AI removal is linked with evidence
+      in review notes and every AI removal is listed in the final chat.
 - [ ] If the input was a link to a previously published release-notes page,
       the generated document covers the *next* release after that page, not
       the release the page itself documents.

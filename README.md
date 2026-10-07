@@ -254,6 +254,9 @@ python build_release_notes.py \
 | `--token` | No | `GITHUB_TOKEN` env var | GitHub personal access token (overrides the env var). |
 | `--output` | No | stdout | Write output to this file instead of stdout. |
 | `--use-prs` | No | Off | Use PR titles instead of commit messages for changelog entries. |
+| `--exclude-docs` | No | Off | Exclude entries whose complete changed-file list is documentation-only. |
+| `--exclude-renovate` | No | Off | Exclude entries authored by a verified Renovate GitHub bot. |
+| `--exclusions-report` | No | None | Optional JSON audit path listing excluded and uncertain entries and per-commit counts. |
 
 Token resolution order: `--token` → `GITHUB_TOKEN` → unauthenticated (public
 repos only, 60 requests/hour).
@@ -290,6 +293,73 @@ If you run the script by hand rather than through the skill, the output is a
    artefact links.
 3. Optionally add a **Known issues** section.
 4. Review and polish individual changelog entries.
+
+### Optional docs and Renovate exclusion
+
+**Nothing is excluded by default.** The two filters are independent: use
+either, both, or neither. For example, to create a draft without documentation
+changes while retaining Renovate changes:
+
+```bash
+python build_release_notes.py \
+  --repo canonical/kafka-operator --from-ref rev247 --to-ref rev248 \
+  --template templates/kafka.md.j2 --use-prs --exclude-docs \
+  --exclusions-report docs-exclusions.json --output revision-248.md
+```
+
+The script excludes one changelog **commit entry** at a time (not GitHub issue
+records). For docs it requires complete changed-file lists for both the
+selected PR and its individual commit (when a PR exists); all paths must be in
+`docs/`, `doc/`, `documentation/`, `releases/` or `release-notes/` (including
+site assets/config), or recognized root prose pages such as `README.md`,
+`SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`. A `docs:` title or
+`documentation` label alone does **not** delete an entry. Mixed code/docs
+changes, unknown paths, unverified renames, and incomplete/failed API lookups
+remain for review. Docs-only commits without a PR are also checked using the
+commit's changed files; failed PR association also keeps the entry. GitHub's
+3000-file PR and 300-file commit caps mean
+some very large changes cannot be safely classified.
+
+For Renovate, the author must have a verified GitHub bot login
+(`renovate[bot]` or `renovate-bot`); a human PR *about* Renovate is retained.
+Commit-only entries require matching bot author and committer logins **and a
+verified valid commit signature**; unknown or unverified identities stay.
+**Bot-authored security and dependency updates are excluded too** when you
+request this filter, so review its audit carefully. Other dependency bots and
+human dependency PRs are not affected.
+
+When filtering, each excluded entry is printed as an informational `[info]`
+line on stderr (the same stream the builder already uses for progress); it
+does not change the success exit code or the Markdown on stdout. The optional
+JSON report contains raw/retained/excluded *entry* counts, the original title,
+PR and commit links, rule and evidence for every exclusion, plus candidates
+retained because they were uncertain. Supply a different report path per repo
+when scripting a multi-repo run. Without a report path the CLI still filters
+and prints exclusions, but **no JSON audit file is written**.
+
+If you use the agent skill instead of the CLI, ask in ordinary language:
+
+| Example prompt | Effect |
+| :--- | :--- |
+| `Generate release notes, excluding documentation changes` | Docs filtering only |
+| `Create release notes but omit Renovate bot changes` | Renovate filtering only |
+| `Write release notes and filter out docs and Renovate changes` | Both filters |
+
+The skill never turns this on because you merely mention docs or Renovate in
+a summary. With an explicit request it passes the corresponding flag(s) to
+each repo draft, reads the temporary per-repo JSON audits, then performs an
+additional **conservative AI review** of remaining entries. The AI only
+removes further high-confidence matches for the requested filter(s); ambiguous
+items stay. After saving the release notes it lists **every AI removal** with
+component, title, link and evidence in chat (or explicitly reports none),
+summarizes deterministic removals, and records all decisions and uncertain
+items in a review-notes comment for human verification. Inspect the linked
+changes there and reinstate anything you want to keep. Without an opt-in, the
+AI exclusion review does not run.
+
+**DA186 caveat:** DA186 calls for a full list of changes including
+documentation. Requesting exclusions deliberately waives that guarantee.
+The skill discloses this in chat and private review notes, not published prose.
 
 ## End-to-end workflow
 
@@ -343,6 +413,9 @@ performed by the agent skill; you only do 1 and 2.
    cases are raised with you. There is deliberately no merge script. If
    [auto-sort](#auto-sort-reclassifying-the-other-improvements-catch-all) is
    enabled, this is where it reclassifies the "Other improvements" catch-all.
+  Only if you [opted into exclusions](#optional-docs-and-renovate-exclusion),
+  it first audits script removals and conservatively checks remaining entries
+  for docs/Renovate misses; the results are reported for human verification.
 10. **The skill writes the introduction and the Compatibility section** — the
     intro from the merged changelog, compatibility from repository sources of
     truth (`charmcraft.yaml`, `metadata.yaml`, snap/rock metadata, release tags)

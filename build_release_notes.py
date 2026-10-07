@@ -7,12 +7,14 @@ release-notes document from a Jinja2 template.
 """
 
 import argparse
+import json
 import os
 import re
 import sys
 import time
 from collections import OrderedDict
 from datetime import datetime, timezone
+from pathlib import PurePosixPath
 
 import jinja2
 import requests
@@ -118,6 +120,14 @@ NON_JIRA_PREFIXES: frozenset[str] = frozenset({
 
 # GitHub compare API returns at most 250 commits per response.
 GITHUB_COMPARE_LIMIT = 250
+
+# Only verified GitHub identities count, never an unverified commit email or
+# a PR title that merely mentions Renovate. The GitHub App uses renovate[bot].
+RENOVATE_LOGINS = frozenset({"renovate[bot]", "renovate-bot"})
+GITHUB_PR_FILES_LIMIT = 3000  # GitHub's PR files endpoint cap
+GITHUB_COMMIT_FILES_LIMIT = 300  # GitHub's commit detail files cap
+DOC_PAGE_EXTENSIONS = frozenset({".md", ".mdx", ".rst", ".adoc", ".asciidoc"})
+DOC_DIRECTORIES = frozenset({"docs", "doc", "documentation", "release-notes", "releases"})
 
 # Transient-failure retry policy for GitHub API requests. The
 # `/commits/{sha}/pulls` endpoint intermittently returns 500s, and a run makes
@@ -237,6 +247,200 @@ def get_prs_for_commit(session: requests.Session, owner: str, repo: str, sha: st
     return github_get(session, url)
 
 
+def _docs_path(path: str) -> bool:
+    """Conservative documented path allowlist; unknown paths are code/unknown."""
+    if not path or path.startswith(("/", "\\")) or "\\" in path or ".." in PurePosixPath(path).parts:
+        return False
+    parts = PurePosixPath(path).parts
+    if parts[0].lower() in DOC_DIRECTORIES:
+        return True  # Includes site assets, extensions and configuration.
+    name = parts[-1].lower()
+    return len(parts) == 1 and (
+        name.startswith(("readme.", "contributing.", "changelog.", "release-notes."))
+        or name in {"readme", "contributing", "changelog", "security.md", "security.rst"}
+    ) and (PurePosixPath(name).suffix in DOC_PAGE_EXTENSIONS or "." not in name)
+
+
+def _file_evidence(files: list[dict], total: int | None) -> tuple[str | None, str | None]:
+    """Return (docs-only evidence, uncertainty); never infer from partial data."""
+    if not isinstance(files, list) or not files or total is None or len(files) != total:
+        return None, "changed-file list is empty or incomplete"
+    paths: list[str] = []
+    for file in files:
+        if not isinstance(file, dict):
+            return None, "changed-file list contains an invalid file record"
+        path = file.get("filename")
+        if not isinstance(path, str):
+            return None, "changed-file list contains a file without a path"
+        paths.append(path)
+        if file.get("status") == "renamed":
+            old = file.get("previous_filename")
+            if not isinstance(old, str):
+                return None, "rename is missing its source path"
+            paths.append(old)
+    if all(_docs_path(path) for path in paths):
+        return "all changed paths are documentation: " + ", ".join(paths), None
+    return None, None
+
+
+def _verified_renovate(commit: dict, pr: dict | None) -> bool:
+    """PR author is authoritative; a signed bot commit needs both matching logins."""
+    if pr is not None:
+        user = pr.get("user") or {}
+        login = user.get("login") if isinstance(user, dict) else None
+        return isinstance(login, str) and login.lower() in RENOVATE_LOGINS
+    author, committer = commit.get("author"), commit.get("committer")
+    signature = (commit.get("commit") or {}).get("verification") or {}
+    return (
+        isinstance(author, dict) and isinstance(committer, dict)
+        and isinstance(author.get("login"), str)
+        and isinstance(committer.get("login"), str)
+        and author["login"].lower() in RENOVATE_LOGINS
+        and committer["login"].lower() in RENOVATE_LOGINS
+        and signature.get("verified") is True
+        and signature.get("reason") == "valid"
+    )
+
+
+class ExclusionPolicy:
+    """Opt-in filtering with evidence cached per PR and an auditable ledger."""
+
+    def __init__(
+        self, session: requests.Session, owner: str, repo: str,
+        exclude_docs: bool, exclude_renovate: bool,
+    ) -> None:
+        self.session = session
+        self.owner = owner
+        self.repo = repo
+        self.exclude_docs = exclude_docs
+        self.exclude_renovate = exclude_renovate
+        self.file_cache: dict[str, tuple[str | None, str | None]] = {}
+        self.commit_cache: dict[str, tuple[dict | None, str | None]] = {}
+        self.failed_pr_lookups: set[str] = set()
+        self.excluded: list[dict] = []
+        self.retained_for_review: list[dict] = []
+
+    def _commit_details(self, commit: dict) -> tuple[dict | None, str | None]:
+        sha = commit["sha"]
+        if sha in self.commit_cache:
+            return self.commit_cache[sha]
+        base = f"https://api.github.com/repos/{self.owner}/{self.repo}"
+        try:
+            # Commit detail paginates the `files` array, not the response
+            # object. A mapped login alone is not authenticated bot identity;
+            # use this response's verified signature for commit-only changes.
+            url = f"{base}/commits/{sha}"
+            params: dict = {"per_page": 100}
+            files: list[dict] = []
+            details = None
+            while url and len(files) < GITHUB_COMMIT_FILES_LIMIT:
+                response = _get_with_retry(self.session, url, params)
+                response.raise_for_status()
+                data = response.json()
+                if details is None:
+                    details = data
+                page = data.get("files")
+                if not isinstance(page, list):
+                    raise ValueError("commit changed-file page is missing")
+                files.extend(page)
+                url = response.links.get("next", {}).get("url")
+                params = {}
+            if url or len(files) >= GITHUB_COMMIT_FILES_LIMIT:
+                result = (None, "commit changed-file list reaches GitHub's 300-file cap")
+            else:
+                result = (files, None)
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            result = (None, f"commit lookup failed: {exc}")
+            details = None
+        self.commit_cache[sha] = (details, result[1])
+        self.file_cache[f"commit:{sha}"] = (
+            _file_evidence(result[0], len(result[0])) if result[0] is not None
+            else (None, result[1])
+        )
+        return self.commit_cache[sha]
+
+    def _docs_evidence(self, commit: dict, pr: dict | None) -> tuple[str | None, str | None]:
+        if not pr:
+            self._commit_details(commit)
+            return self.file_cache[f"commit:{commit['sha']}"]
+        key = f"pr:{pr['number']}"
+        if key not in self.file_cache:
+            base = f"https://api.github.com/repos/{self.owner}/{self.repo}"
+            try:
+                details = github_get(self.session, f"{base}/pulls/{pr['number']}")
+                total = details.get("changed_files")
+                if not isinstance(total, int) or total >= GITHUB_PR_FILES_LIMIT:
+                    result = (None, "PR changed-file count is missing or reaches GitHub's 3000-file cap")
+                else:
+                    files = github_get_paginated(self.session, f"{base}/pulls/{pr['number']}/files")
+                    result = _file_evidence(files, total)
+            except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+                result = (None, f"PR changed-file lookup failed: {exc}")
+            self.file_cache[key] = result
+        result = self.file_cache[key]
+        if result[0]:
+            self._commit_details(commit)
+            commit_result = self.file_cache[f"commit:{commit['sha']}"]
+            if commit_result[1]:
+                return None, commit_result[1]
+            if not commit_result[0]:
+                return None, "PR net diff is docs-only but this commit changes non-doc files"
+            return result[0] + "; " + commit_result[0], None
+        return result
+
+    def inspect(self, commit: dict, pr: dict | None) -> tuple[list[dict], str | None]:
+        """Return matching rules and any reason a possible match was retained."""
+        if commit["sha"] in self.failed_pr_lookups:
+            return [], "associated-PR lookup failed; filtering skipped"
+        reasons: list[dict] = []
+        uncertain = None
+        if self.exclude_renovate and pr is None:
+            details, error = self._commit_details(commit)
+            uncertain = error
+            if details is not None:
+                commit = details
+        if self.exclude_renovate and _verified_renovate(commit, pr):
+            reasons.append({"rule": "renovate", "evidence": "verified GitHub Renovate login"})
+        if self.exclude_docs:
+            evidence, docs_uncertain = self._docs_evidence(commit, pr)
+            uncertain = uncertain or docs_uncertain
+            if evidence:
+                reasons.append({"rule": "docs", "evidence": evidence})
+        return reasons, uncertain
+
+    def record(
+        self, entry: dict, commit: dict, pr: dict | None,
+        reasons: list[dict], uncertain: str | None,
+    ) -> bool:
+        """Record a decision; return whether to omit this commit's entry."""
+        title = pr.get("title") if pr else commit["commit"]["message"].split("\n", 1)[0]
+        item = {
+            "title": title, "message": entry["message"],
+            "pr_url": entry["pr_url"], "commit_url": entry["commit_url"],
+            "commit_sha": entry["commit_sha"], "reasons": reasons,
+        }
+        if reasons:
+            self.excluded.append(item)
+            print(
+                f"[info] Excluded {entry['pr_url'] or entry['commit_url']} "
+                f"({', '.join(reason['rule'] for reason in reasons)}): {title}",
+                file=sys.stderr,
+            )
+            return True
+        labels = entry["labels"]
+        docs_hint = self.exclude_docs and bool(re.match(
+            r"^\s*(?:\[[^]]+\]\s*)?docs(?:\([^)]*\))?:", title or "", re.I,
+        ))
+        docs_hint |= self.exclude_docs and any(
+            _normalise_label(label) in {"documentation", "docs"} for label in labels
+        )
+        renovate_hint = "renovate" in (title or "").lower()
+        if uncertain or docs_hint or (self.exclude_renovate and renovate_hint):
+            item["review_reason"] = uncertain or "title/label suggests a filter, but verified evidence does not"
+            self.retained_for_review.append(item)
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Data extraction helpers
 # ---------------------------------------------------------------------------
@@ -335,6 +539,7 @@ def build_entries(
     prs_by_sha: dict[str, list[dict]],
     use_prs: bool,
     repo_url: str,
+    exclusion_policy: ExclusionPolicy | None = None,
 ) -> OrderedDict[str, list[dict]]:
     """Categorise commits into an ordered dict of release-notes entries.
 
@@ -380,6 +585,10 @@ def build_entries(
             "jira_ids": jira_ids,
             "labels": labels,
         }
+        if exclusion_policy:
+            reasons, uncertain = exclusion_policy.inspect(commit, pr)
+            if exclusion_policy.record(entry, commit, pr, reasons, uncertain):
+                continue
         buckets[category].append(entry)
 
     # Return only non-empty categories, preserving CATEGORY_ORDER.
@@ -457,6 +666,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Use PR titles instead of commit messages for changelog entries.",
     )
+    parser.add_argument(
+        "--exclude-docs", action="store_true",
+        help="Omit entries whose complete changed-file list is documentation-only.",
+    )
+    parser.add_argument(
+        "--exclude-renovate", action="store_true",
+        help="Omit entries authored by a verified Renovate GitHub bot.",
+    )
+    parser.add_argument(
+        "--exclusions-report", default=None,
+        help="Optional JSON audit path for excluded and uncertain entries.",
+    )
     return parser.parse_args(argv)
 
 
@@ -524,6 +745,7 @@ def main(argv: list[str] | None = None) -> None:
     # Fetch associated PRs for each commit.
     print("[info] Fetching associated PRs for each commit...", file=sys.stderr)
     prs_by_sha: dict[str, list[dict]] = {}
+    failed_pr_lookups: set[str] = set()
     for i, commit in enumerate(commits, 1):
         sha = commit["sha"]
         try:
@@ -532,11 +754,33 @@ def main(argv: list[str] | None = None) -> None:
             prs_by_sha[sha] = [p for p in prs if p.get("merged_at")]
         except requests.HTTPError:
             prs_by_sha[sha] = []
+            failed_pr_lookups.add(sha)
         if i % 25 == 0 or i == len(commits):
             print(f"[info]   {i}/{len(commits)} commits processed.", file=sys.stderr)
 
     # Build categorised entries.
-    categories = build_entries(commits, prs_by_sha, args.use_prs, repo_url)
+    policy = (
+        ExclusionPolicy(session, owner, repo, args.exclude_docs, args.exclude_renovate)
+        if args.exclude_docs or args.exclude_renovate else None
+    )
+    if policy:
+        policy.failed_pr_lookups = failed_pr_lookups
+    categories = build_entries(commits, prs_by_sha, args.use_prs, repo_url, policy)
+    if args.exclusions_report:
+        excluded = policy.excluded if policy else []
+        report = {
+            "repository": f"{owner}/{repo}", "from_ref": args.from_ref, "to_ref": to_ref,
+            "filters": {"docs": args.exclude_docs, "renovate": args.exclude_renovate},
+            "truncated": truncated,
+            "counts": {"raw_entries": len(commits), "kept_entries": len(commits) - len(excluded),
+                       "excluded_entries": len(excluded)},
+            "excluded": excluded,
+            "retained_for_review": policy.retained_for_review if policy else [],
+        }
+        with open(args.exclusions_report, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        print(f"[info] Exclusion report written to {args.exclusions_report}", file=sys.stderr)
 
     # Prepare template context.
     title = args.title or to_ref
@@ -549,6 +793,7 @@ def main(argv: list[str] | None = None) -> None:
         "to_ref": to_ref,
         "categories": categories,
         "category_order": CATEGORY_ORDER,
+        "exclude_docs": args.exclude_docs,
     }
 
     # Validate and render the template.
