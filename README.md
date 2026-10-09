@@ -9,7 +9,9 @@ The repository contains two things:
   GitHub repository into a categorised changelog document.
 - **`.github/skills/release-notes/SKILL.md`** — an agent skill that drives the
   whole release-notes workflow for a *product* (which usually spans several
-  repositories), calling the script as one of its steps.
+  repositories), calling the script as one of its steps. Explicit component
+  scope and the optional autopilot policy belong to this skill, not the
+  single-repo builder CLI.
 
 ## Choose how you'll run it
 
@@ -108,6 +110,99 @@ Add `auto-sort on` (or `off`) to skip the question about reclassifying the
 "Other improvements" catch-all:
 
 > Create release notes for canonical/opensearch-operator with auto-sort on
+
+### Set the complete component list explicitly
+
+To prevent discovery from adding or removing components, **label the list
+exhaustive** in the prompt or provide a dedicated UTF-8 component-list file:
+
+> Generate release notes for Charmed OpenSearch. Components (exhaustive):
+> Charmed OpenSearch | canonical/opensearch-operator | opensearch
+> Charmed OpenSearch Dashboards | canonical/opensearch-operator | opensearch-dashboards
+
+Or attach/name a text file, e.g. `releases/components.txt`, and request:
+
+> Generate release notes for Charmed OpenSearch; components file:
+> releases/components.txt (exhaustive)
+
+The file has **one component per line**: `Display name`, `owner/repo`,
+`Display name | owner/repo`, or
+`Display name | owner/repo | tag namespace`. Blank lines and `#` comments
+are allowed; no Markdown headings or unrelated prose. File paths are relative
+to the open target workspace. Multiple components may share a repo; specify
+their tag namespaces if they have separate revisions. A name without a repo
+is allowed, but the skill needs an unambiguous repo mapping before collecting
+changes. A name-only line is syntactically indistinguishable from prose:
+the agent verifies it against product sources before claiming coverage.
+An invalid/unreadable/empty file blocks scope resolution; it never
+falls back to detection. If both a prompt list and a component file are given,
+**the file wins** and the difference is reported, not merged. Previous notes,
+discovered siblings, the open repo and product templates still provide
+evidence, but **cannot change** an exhaustive list. Unchanged listed
+components can still appear in Compatibility; unverified components are
+flagged, not silently omitted.
+
+`tools/release_scope.py` parses and validates the same list (`--file PATH`,
+or `--inline-file PATH` for inline text staged in a temporary file), outputs
+normalized JSON and can audit a saved page via `--document PATH` plus
+`--candidates-file PATH` (previous-note/template names, one per line). Its
+audit finds known mismatches in headings and table rows, **not** aliases or
+incorrect attribution in prose; the agent must review those too.
+
+### Autopilot: non-interactive review, not approval
+
+Opt in explicitly with "autopilot" or "unattended":
+
+> Generate release notes in autopilot mode for Charmed OpenSearch;
+> components file: releases/components.txt (exhaustive);
+> from-ref: opensearch/rev315; to-ref: a pinned commit SHA;
+> output: docs/reference/release-notes/revision-316.md
+
+Autopilot is a **skill mode**: the agent still resolves refs, builds per-repo
+drafts, merges them and checks the final page. There is not yet an Airflow DAG
+or a product-level executable. The single-repo `build_release_notes.py` CLI
+already runs without prompting, but it cannot do the agent's product-level
+editorial work by itself. A future runner can consume the inputs and JSON
+status described here.
+
+In autopilot the agent asks **no questions** (including CLI questions). Pin
+each component's refs/branch, intended title and output location for the most
+repeatable runs; provide GitHub credentials as the builder normally expects
+(`GITHUB_TOKEN` or authenticated `gh`). Ensure the builder cache and Python
+dependencies are provisioned ahead of time for network-restricted CI. Missing
+inputs are inferred only when uniquely supported by sources, with ref names
+and resolved SHAs recorded. Auto-sort and docs/Renovate filtering remain off
+unless explicitly requested. If no exhaustive list is supplied, the agent
+uses conservative sibling discovery and reports scope uncertainties; this
+does **not** guarantee product-wide completeness.
+
+The agent writes a factual Markdown page for review if at least one component
+has a verified, complete range. It never overwrites an existing note. If no
+unique docs location/title exists, a safe partial page goes instead under
+`<target-workspace>/.release-notes-review/` with a blocked status; if no
+trustworthy page can be built, it writes only a report. By default the
+versioned, no-overwrite JSON report lives at
+`<target-workspace>/.release-notes-review/<product>-<run-id>.json`
+(or at an explicitly requested report path). It contains every selected
+component, repo/tag series, ref and SHA, evidence, exclusions, checks and
+blockers; `tools/review_report.py` validates and saves it. Status means:
+The helper can also save a staged Markdown page with `--page-source` and
+`--page-output`, refusing to overwrite an existing note while keeping the
+frontmatter/review comment in order. Status means:
+
+| JSON status | Meaning |
+|---|---|
+| `review_required` | Complete checked evidence, awaiting human review; not approved. |
+| `blocked` | Missing/conflicting facts, incomplete range or failed/skipped mandatory check; a partial review page may exist. |
+| `error` | Tool, network or artifact-write failure; inspect the report/log and any partial page. |
+
+The agent also posts a full per-component account, paths, checks and blockers
+in chat/logs. The page's public-facing prose must not contain invented facts;
+its hidden review comment identifies open actions. **A blocked page is not
+DA186-complete, even if it resembles finished notes.** No status approves a
+release, and neither mode publishes, pushes or opens a PR. Future CI must
+inspect the JSON status; a green single-repo builder exit is insufficient
+(it can warn about truncation without failing).
 
 ### First release: no previous notes to build on
 

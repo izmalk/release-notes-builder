@@ -1,7 +1,7 @@
 ---
 name: release-notes
-description: 'Generate DA186-compliant release notes for Canonical Data & AI charms. Use when the user asks to "generate release notes", "create release notes", "compile a changelog", "prepare release notes draft", or a similar phrasing/verb — including bare requests with no repository, product, or ref named at all ("generate release notes", "write the next release notes"), which mean the currently open repository, with the product, refs and components auto-detected from its own docs. Also accepts one or multiple charm repositories (e.g. canonical/kafka-operator), a link to a previously published release-notes page, or an explicit starting point named as a revision, version, tag or commit SHA ("since rev247", "from 2.1.0", "changes after revision 315"), optionally for a branch, track, or a commit range. Handles a product''s very first release notes, where no previous notes exist to build on. Gathers changes via GitHub API, discovers sibling components from prior release notes, merges multi-repo notes into a single product draft, writes intro and compatibility sections, and saves the result locally for review. Never publishes anything.'
-argument-hint: '[repo ...] [--track TRACK] [--branch BRANCH] [--from-ref REF] [--to-ref REF] [auto-sort on|off] [exclude docs|renovate|both]'
+description: 'Generate DA186-compliant release notes for Canonical Data & AI charms, locally for human review. Use for generate/create/write release notes or changelogs, including bare requests for the open product repo, explicit repos or refs, a link to previous notes, or a first release. Accept an exhaustive component list inline or in an attached/named file; this list overrides component discovery. An explicit autopilot/unattended request runs without questions and produces a review page where safe, a JSON review report, and a full chat/log summary. Otherwise ask about genuine ambiguities and discovered siblings. Merge per-repo changelogs, write intro and compatibility, and never publish anything.'
+argument-hint: '[repo ...] [components (exhaustive): LIST | components file: PATH] [autopilot] [track/refs] [auto-sort on|off] [exclude docs|renovate|both]'
 ---
 
 # Release Notes Generation (DA186)
@@ -49,6 +49,11 @@ repository.
 - "Generate release notes excluding documentation changes and Renovate bot
   changes" (opts in to the independent changelog exclusion filters; either
   kind may be requested alone — see "Opt-in changelog exclusions" below)
+- "Generate release notes; components (exhaustive): Charmed OpenSearch |
+  canonical/opensearch-operator" (the list, not sibling detection, sets scope)
+- "Generate release notes in autopilot mode; components file:
+  releases/components.txt" (unattended, with a local page when safe and a
+  machine-readable review report; **not** an approval or publication step)
 
 ## Installing and running this skill
 
@@ -131,8 +136,8 @@ containing `build_release_notes.py`:
    One request, ~80 KB, no authentication and no `git` needed (the repository
    is public). Tell the user this happened and where the cache is.
 
-   `'*/tools/*'` matters: without it, step 9's `tools/check_autolinks.py` is
-   missing and the auto-link check silently can't run. Note that `tar` exits
+  `'*/tools/*'` matters: without it, step 9's `tools/check_autolinks.py`,
+  `tools/release_scope.py`, and `tools/review_report.py` are missing. Note that `tar` exits
    **2** with `*/tools/*: Not found in archive` if the pushed branch predates
    that directory, *even though the other files extracted correctly*. Don't
    treat that non-zero exit as a failed bootstrap: check which files actually
@@ -176,6 +181,11 @@ component discovery, compatibility, or the DA186 checklist just because the
 user said "create" instead of "generate".
 
 ## Infer what's determinable; ask about what isn't
+
+This section governs **interactive** runs. In an explicitly requested
+`autopilot` run, the non-interactive policy below replaces *every* instruction
+to ask or confirm, including those in later steps and the checklist. Never
+send a CLI prompt or agent question in autopilot mode.
 
 Two failure modes matter equally, and the line between them is **confidence**,
 not effort:
@@ -226,6 +236,158 @@ Never paper over an unresolved ambiguity with a `TODO` in the review notes
 release owner can take (final revision numbers, artefact links), not for
 decisions you avoided making or asking about.
 
+## Explicit exhaustive component scope
+
+Use this only when the user identifies a list as **complete/exhaustive** (or
+explicitly says "only these components"). An incidental repo name, a previous
+notes URL, or a file attached for other purposes is *not* an exhaustive list.
+Resolve this before workspace/previous-note component discovery. A component
+is a named release unit (charm, UI, rock, snap, module, etc.), not necessarily a
+repository: several components may share a repo and have different tag series.
+
+Supply the list in the request after `components (exhaustive):`, one item per
+line, or name/attach a UTF-8 text file as `components file: <path>` and say it
+is exhaustive. Supported lines (blank lines and `#` comments are ignored):
+
+```text
+Charmed Apache Kafka | canonical/kafka-operator | kafka
+Charmed Kafka UI | canonical/kafka-ui-operator
+Charmed Karapace
+```
+
+Fields are `display name [| owner/repo [| tag namespace]]`; `owner/repo` alone
+is also accepted (the repo basename is the initial display name). Tag
+namespace is optional, but strongly recommended for a repo containing several
+charms. The file must contain *only* the list — no Markdown title, prose or
+other metadata. Name-only lines cannot be distinguished mechanically from
+ordinary prose: verify each name against product metadata/previous notes;
+an unmatched name is unresolved scope, not a valid component merely because
+the parser accepted its syntax. For a list included inline in chat, use the same lines (not
+necessarily a code fence). File paths resolve relative to the **target
+workspace**, not `$BUILDER_HOME`. Do not search for a file that was not
+explicitly named or attached. If both an explicit file and an inline list are
+given, **the file wins**: report differences and ignore prompt-only entries,
+even when they look important. A missing, unreadable, empty or malformed file
+is a blocker, never permission to fall back to the inline list or discovery.
+
+Use `$BUILDER_HOME/tools/release_scope.py --file <path>` to parse a file, or
+pass the inline text via `--inline-file <temporary-UTF8-file>`; with both
+sources pass both flags and read the `ignored_inline` discrepancy from its
+JSON stdout. In interactive mode ask the user to fix an invalid list; in
+autopilot record a blocker. Do not feed arbitrary prior-release prose to this
+validator. Resolve each name to exactly one repo and, where needed, tag series
+using repo/docs evidence; record the mapping and evidence. A missing repo or
+ambiguous mapping is **not** grounds to drop a selected component. Do not add
+the open repo implicitly if it is absent from the list; it remains a source
+for product facts, not part of the selected release scope.
+
+Once selected, **freeze the ordered component set**. Previous notes, local
+metadata, detected siblings, product templates and their hard-coded
+Compatibility rows can only provide candidates/evidence for that set; they
+must not add, remove or rename it. Log any discrepancy (including prompt vs
+file) for review. Compare every changelog component heading and Compatibility
+row/subheading against the set. Include an unchanged selected component in
+Compatibility when its current facts can be verified, but omit empty
+changelog headings; flag missing compatibility rather than inventing a row.
+The validator's optional `--document` and `--candidates-file` (names gathered
+from previous notes/template, one per line) audit known mismatches. This is
+only a *syntactic* guard: inspect aliases, links, prose and shared-repo
+attribution by hand. Do not treat a clean audit as proof of correctness.
+
+## Autopilot (explicit opt-in, review only)
+
+Only `autopilot` or `unattended` in the invocation enables this mode. The
+single-repo `build_release_notes.py` CLI is already non-interactive; **this is
+an agent-skill workflow, not a new product-level CLI**. CI/Airflow integration
+will need an agent runner later. Keep interactive questions and confirmations
+unchanged by default. In autopilot:
+
+1. **Never ask or wait for input.** No confirmation for inferred endpoints,
+  first-release starting point, sibling components, auto-sort, template,
+  output folder, compatibility, bootstrap, or slow docs checks. Log each
+  decision and source instead. If no exhaustive list was supplied, discover
+  conservatively from this track's previous notes and workspace: include
+  uniquely identified components, record uncertain siblings, and mark
+  `blocked` whenever completeness cannot be verified. A detected sibling is
+  never silently *assumed absent*. No list means inferred, **not** exhaustive.
+2. **Prefer pinned inputs for repeatability.** Recommended inputs are product,
+  track/branch, each component's repo/tag namespace and `from-ref`, `to-ref`
+  SHA, title revision, output path, and optional review-report path. Without
+  them infer only values with a unique source. Auto-sort stays **off**, both
+  exclusion filters stay **off**, and scope stays on one track unless
+  explicitly changed. Do not select a neighbouring tag for a missing ref,
+  guess a conflicting revision/compatibility value, or apply a primary
+  component's revision to another tag series. Resolve each end to a commit
+  SHA, verify `from` is an ancestor of `to` and the range is non-empty;
+  record ref names, SHAs, branch and evidence. Pass the pinned end SHA to
+  each builder run rather than allowing HEAD to move between components.
+3. **Preflight without inventing facts.** Check tag namespaces, existing
+  release-notes files and git history (never overwrite), uniqueness of track
+  and output location, and range completeness. A compare truncated at 250
+  commits is *not* a complete release: fetch all remaining non-overlapping
+  chunks and reconcile their counts, or mark `blocked` and exclude the
+  incomplete component from the page. If no previous tag exists, the root
+  commit excludes that commit from a `from..to` range: do not claim full
+  history without separately including it. Record a first-release coverage
+  blocker if it cannot be verified. A script's zero exit code alone does not
+  mean the range is complete.
+4. **Continue with safe, verifiable parts only.** A missing component repo,
+  missing compatibility value, conflicting refs, or uncertain completeness
+  must be named as a blocker in the review comment and JSON; never write
+  invented visible prose or silently omit a requested component. Only
+  publishable-looking *factual* text goes in the visible body. If at least
+  one component has a verified, complete range, save a normal-format page
+  with the blocked status noted in the hidden review comment. If no verified
+  component can be represented, produce a report only — no empty/fake page.
+  A blocked page is **not DA186-complete or approved**. Do not edit template
+  files, docs configuration, wordlists or unrelated source files unattended;
+  report required changes as review actions. Never push, publish, or open a
+  PR. Do not overwrite an existing file (including a report): choose a new
+  unique run ID, or report a blocker when the required publish path exists.
+5. **Verify the staged page (step 9), then write durable artifacts** as
+  specified in step 8 below, with a full log/chat handoff. Human approval
+  of the text, completeness and compatibility
+  is always required, including when all automated checks pass. Treat
+  unresolved factual questions as `blocked`, not as tacit approval.
+
+### Autopilot report contract
+
+Save a JSON object with `schema_version: 1`, `mode: "autopilot"`,
+`human_review_required: true`, `status`, `scope_source` (including the file path
+when applicable), `product`, `track`, `components`,
+`discovered_not_included`, `blockers`, `checks` and `markdown_path` (or
+`null`). Use `review_required` only for complete, checked evidence with **no
+blockers**; `blocked` for incomplete/contradictory release facts or failed
+checks; `error` for a tool/network/write failure. No status means approved.
+For each component record `name`, `repo`, `tag_namespace`, `from_ref`,
+`from_sha`, `to_ref`, `to_sha`, `entries` (raw/kept/excluded/deduplicated),
+`exclusions` (and every AI exclusion with reason), and `evidence`; use `null`
+for an unresolved mapping, never a made-up ref. Also record the source-file
+vs inline discrepancy, inferred decisions, auto-sort settings/moves, all
+checks attempted/skipped and their results, compatibility TODOs and
+collision/coverage blockers. Keep an itemised evidence trail of filter
+removals, not only aggregate counts. Checks can be `pass`, `fail`, or `skipped`
+with a reason. The five mandatory check records are named `scope`, `range`,
+`completeness`, `autolinks`, and `docs`; all must pass for `review_required`.
+In standalone mode, `docs` passes only after documenting that docs checks
+do not apply because no target docs tree is open. When a docs tree is open
+but checks are absent/unrunnable, mark `docs` skipped and status `blocked`.
+For component entry counts use `raw = kept + excluded + deduplicated`; also
+log category moves separately. Report *every* selected component, including unchanged or
+blocked ones, even when it has no changelog heading.
+
+Build the JSON from the run's evidence (not from guesses); validate and save
+with `$BUILDER_HOME/tools/review_report.py <temporary-report.json>
+<durable-report.json> [--page-source <staged-page.md> --page-output <page.md>]`.
+Stage the page in the run's temp directory, **not** at the final filename;
+the helper checks status, frontmatter/comment ordering and destination
+collisions, then saves the page and report without overwriting. On a
+report-only outcome omit both page flags and use `markdown_path: null`. A
+failed report write after the page is saved is an `error`: disclose the page
+path in logs rather than calling it a successful handoff. The JSON/report
+format is an agent handoff contract,
+not an unattended product orchestrator or an approval signal.
+
 ## Starting from the currently open repository (nothing named)
 
 When the user asks for release notes **without naming a repository, product,
@@ -244,9 +406,12 @@ This is the default path in cross-repo mode. Resolve it like this:
    Normalise the remote to `owner/repo` (strip `git@github.com:`,
    `https://github.com/`, and a trailing `.git`). If the open workspace is
    **release-notes-builder itself**, this is standalone mode, and a bare
-   request has no target — that is the one case where you must ask which
-   repository or product to generate for, since this repo is the tool, not a
-   product. Ask which repository to use, rather than guessing, if: there is no
+  request has no target — that is the one case where you must ask which
+  repository or product to generate for, since this repo is the tool, not a
+  product. **A request with an exhaustive component list is not bare**:
+  derive the target/product from its uniquely mapped repositories, or ask
+  interactively / record a blocker in autopilot if there is no unique
+  product. Ask which repository to use, rather than guessing, if: there is no
    `origin` (list the remotes you did find and ask which to use); the
    workspace isn't a git repo at all; or it's a multi-root workspace with
    several candidate product repos open.
@@ -276,8 +441,9 @@ This is the default path in cross-repo mode. Resolve it like this:
      *after* it; never regenerate the revision it documents.
    - **Track** — from its path or frontmatter, cross-checked against the
      current branch and the docs' default track.
-   - **The component list** — every component subheading and Compatibility
-     row, which feeds the sibling-component confirmation in step 1.4.
+   - **The component candidates** — every component subheading and
+     Compatibility row, which feed step 1.4 only when no exhaustive list was
+     supplied; an explicit list always takes precedence.
    - **The structure to reproduce** — use it as the reference document for
      template selection in step 2, and save the new document into this same
      folder in step 8, following its naming convention.
@@ -319,10 +485,9 @@ generate:
      the *next* release after it — from that revision forward to `HEAD` (or a
      `to-ref` the user gives) — never regenerate the revision the link itself
      documents.
-   - **The full list of components** the product ships — read every
-     component subheading and Compatibility subsection on the page, don't
-     stop at the one component the user named in their message (see "Always
-     check for sibling components" in step 1 below).
+   - **The component candidates** the page documents — read every component
+     subheading and Compatibility subsection, but never override an explicit
+     exhaustive list with this historical scope (see step 1.4).
    - **The document structure to reproduce** — use this page directly as the
      "most recent published release notes" source for step 2 (template
      selection); if `templates/<product>.md.j2` doesn't exist yet, build it
@@ -591,6 +756,9 @@ directly.
 
 ### When the user pinned neither end, propose and confirm
 
+In **interactive mode only**; autopilot records the inference and SHA evidence
+without asking, and blocks on ambiguity (see "Autopilot").
+
 If the request named no revisions, infer all three values, then **put them to the
 user for confirmation or override before generating** — one short message, with
 the reasoning visible so a wrong inference is obvious at a glance:
@@ -690,7 +858,9 @@ Then adapt each step:
    charms, `charmcraft.yaml`/`metadata.yaml` resources naming a rock or snap,
    or an obvious `*-k8s-operator` counterpart in the same org. Present
    whatever you find and ask which components this document should cover —
-   still never adding one silently.
+  still never adding one silently. If an exhaustive list was provided, this
+  discovery is a cross-check only. In autopilot without a list, use the
+  uniquely supported candidates, flag uncertainty as `blocked` and do not ask.
 4. **Compatibility** — there is no previous table to bump, so build it from
    the repo's own sources of truth (`charmcraft.yaml` platforms/bases,
    `metadata.yaml`, snap/rock metadata, the release tag's assets). Ask for any
@@ -751,6 +921,9 @@ titles as the evidence.
 ### Default: off, but always offered
 
 Auto-sort is **off by default**. Do not run it silently.
+
+In autopilot, keep the off default without asking; only an explicit opt-in
+enables it. Record the setting in the review report.
 
 1. If the user's request explicitly enables or disables it, obey that and do
    not ask (see "Recognising explicit instructions" below).
@@ -1014,6 +1187,8 @@ involved. Follow these rules:
 
 | Input | Default | Notes |
 |-------|---------|-------|
+| Explicit exhaustive components | None; discover and confirm interactively | Inline `components (exhaustive):` or attached/named `components file:`. File wins over prompt; overrides component discovery and template rows (see "Explicit exhaustive component scope") |
+| Autopilot | **Off** | Explicit `autopilot`/`unattended` request only; no questions, review Markdown when safe and JSON report (see "Autopilot") |
 | Repositories | **The currently open repository** (from its `origin` remote) | `owner/repo` or full GitHub URL; one or more. Never required: a bare request means the open repo — see "Starting from the currently open repository" |
 | Previous release notes link | — (optional alternate to naming repos) | A URL to an already-published release-notes page (e.g. a `revision-NNN` docs page); resolves product, track, from-ref, and component list — see "Starting from a link to previously published release notes". The open repo's own newest release-notes file serves the same purpose automatically |
 | Track | The documentation's default track (see above) | Ask if it can't be determined |
@@ -1021,13 +1196,14 @@ involved. Follow these rules:
 | From-ref | **The newest release notes already in the repo's docs tree** (that revision's tag, *not* +1); then the docs site, then the latest ancestor tag, then the first commit (first release), then ask | Tag/SHA/branch, or a revision/version the user names — see "Resolving the range and the revision number" |
 | To-ref | **HEAD of the branch** — the checked-out branch for the open repo, else its default branch | Tag/SHA/branch |
 | Revision number (title) | **The highest revision number in the repo's tags**; that revision if the tag is at HEAD, else the first number no tag or document already uses | The docs can't supply this — tags routinely run dozens of revisions ahead of published notes |
-
-When the user pinned **neither** end of the range, infer all three and **put them
-to the user for confirmation or override** before generating (see "When the user
-pinned neither end, propose and confirm").
 | Product name / title | Derived from repos | e.g. "Charmed Apache Kafka" |
 | Auto-sort | **Off** | Reclassify the "Other improvements" catch-all by conventional-commit prefix. Ask once if not specified; the user can say "auto-sort on/off" — see "Auto-sort" above |
 | Output file | See step 8: the target repo's existing release-notes location when run cross-repo, else `release-notes/<product>-<to-ref>.md` | Ask the user if no existing location can be found in the target repo |
+
+When the user pinned **neither** end of the range, infer all three and **put them
+to the user for confirmation or override** before generating *interactively*
+(see "When the user pinned neither end, propose and confirm"). In autopilot,
+record verified inferences in the review report instead.
 
 If the user gives only repositories — or nothing at all — proceed with
 defaults and only ask about genuinely ambiguous things (see "Ask the user"
@@ -1037,12 +1213,22 @@ below).
 
 ### 1. Resolve references
 
-First, if the user named no repository, resolve the target from the currently
-open workspace and its own release notes (see "Starting from the currently
-open repository" above). That single step usually settles the repo, product,
-track, `from-ref` and component list at once, so do it before the batched
-resolution below and treat its results as "user-specified" for the priority
-rules that follow.
+**First load and freeze any explicit exhaustive list** ("Explicit exhaustive
+component scope"). Where present, the workspace/URL supplies facts, *not*
+scope; run discovery only as a discrepancy check. In autopilot without a list,
+record that scope was inferred and flag uncertain siblings. Never equate
+"repository named in the request" with "every component in that repository".
+
+First, if no repository was named **and the exhaustive list has no uniquely
+mapped repository**, resolve the target from the currently open workspace and
+its own release notes (see "Starting from the currently open repository"
+above). If the list maps to one or more repositories, resolve the product
+identity from them; no open workspace repo is implicitly included. If that
+identity is ambiguous, ask interactively or record a blocker in autopilot.
+Without an explicit list, workspace detection usually settles the repo,
+product, track, `from-ref` and component candidates at once. Treat resolved
+facts as inputs for the priority rules below, but not as user-specified scope
+when an exhaustive list exists.
 
 Then resolve the track scope (see "Track / channel scope" above) — this is
 a fixed, small cost regardless of repo count (see "Keep data gathering lean").
@@ -1087,9 +1273,16 @@ repo-by-repo:
       `compare` call per candidate tag — using the **full namespaced ref**.
    d. If the product has no release notes and no tags at all, treat it as a
       first release — see "First release: a product with no release notes
-      yet" above — and confirm the starting point with the user.
+      yet" above — and confirm the starting point with the user interactively;
+      in autopilot record a blocker if whole-history coverage is uncertain.
    e. If neither can be determined, ask the user which ref to start from.
-4. **Check for sibling components not named by the user.** Even when the
+4. **Check for sibling components not named by the user.** If an explicit
+  exhaustive list exists, treat the following checks as *read-only evidence*:
+  compare names with the list, record extras/missing names, and do not add or
+  remove anything from scope or ask about detected siblings. If no list was
+  supplied, follow the interactive confirmation procedure below; in
+  autopilot use uniquely mapped candidates and flag uncertainty as blocked.
+  Even when the
    user names (or links to) only one main charm/repo, a product's release
    notes often cover additional components that ship alongside it — a
    companion charm (e.g. a dashboards/UI charm), a snap, a rock, a Terraform
@@ -1107,7 +1300,9 @@ repo-by-repo:
       user confirms; skip a component the user declines, and note the
       decision in the review notes either way. Skip this ask entirely only
       if the user's original request already explicitly restricted scope to
-      a single named component (e.g. "just the charm, nothing else").
+      a single named component (e.g. "just the charm, nothing else"), or
+      provided an exhaustive list. In autopilot never ask: record inferred
+      inclusions and all unresolved candidates in the JSON report instead.
    c. For every sibling component the user confirms, resolve its
       branch/from-ref/to-ref the same way as the named repo(s), check it for
       changes in range, and include it in the merged draft (or carry over
@@ -1118,7 +1313,7 @@ repo-by-repo:
       user for that repository's address** (batch this with the step 1.4.b
       confirmation question when possible) rather than guessing or silently
       dropping it. Only fall back to a `TODO` in the review notes if the
-      user doesn't know the repo either.
+      user doesn't know the repo either. In autopilot flag this as `blocked`.
    e. Record in the review notes which components were added this way (and
       that the user confirmed them, and supplied the repo address if it
       wasn't auto-mapped) or explicitly declined.
@@ -1132,8 +1327,10 @@ repo-by-repo:
    generate a revision at or below one already documented" against the repo's
    release-notes folder **and its git history**, and stop to ask the user if
    anything at or above your number is already documented. Finally, if the user
-   pinned neither end of the range, put the inferred `from-ref`/`to-ref`/revision
-   to them for confirmation. See "Resolving the range and the revision number".
+  pinned neither end of the range, put the inferred `from-ref`/`to-ref`/revision
+  to them for confirmation **unless autopilot is enabled**: then record the
+  inferred refs and their resolved SHAs without asking. See "Resolving the
+  range and the revision number".
 
 Record which source was used for each repo — it goes into the review notes.
 If a repo's default branch is a single-track repo (e.g. `spark-k8s-toolkit-py`
@@ -1207,6 +1404,16 @@ right choice (see "First release: a product with no release notes yet").
    larger product, say so in the review notes and intro — do not retitle the
    document after that component.
 
+An existing product template supplies **layout**, not component authority.
+Its static Compatibility rows (e.g. Kafka/Kafka UI and OpenSearch/Dashboards)
+must be filtered to the selected components during the merge; do not copy
+unlisted rows. For listed components without a static row, add a row or
+subsection in the same product format using verified facts. In autopilot,
+creating or modifying a persistent template in `$BUILDER_HOME` is not allowed:
+derive the product layout into a temporary run-local template, or record a
+blocker if this cannot be done accurately. The base template is still only
+allowed for a verified first release.
+
 ### 3. Generate per-repo drafts
 
 Create one system temp directory for this run's intermediate drafts, e.g.
@@ -1248,6 +1455,15 @@ Notes:
   all chunk reports before deleting any of them.
 - If a repo has no changes in the range, skip it and note that in the review
   notes.
+- When two components share a repository, do not duplicate its entire
+  repo-wide draft under both headings. Resolve each component's tag namespace,
+  range and entries from verified evidence; if the builder cannot isolate
+  changes confidently, mark the attribution blocked. An unchanged listed
+  component can still appear in Compatibility.
+- In autopilot pass a previously verified **end SHA** as `--to-ref`; the
+  builder's default branch HEAD is mutable. Do not merge a truncated draft
+  as if it were complete. Store per-chunk counts and audit evidence in the
+  durable review report, not just in a deleted temp directory.
 
 ### 4. Merge the drafts and polish the changelog
 
@@ -1278,6 +1494,12 @@ For multiple repositories, build the merged "List of changes" like this:
 - Carry every entry over verbatim (message text, Jira links, PR link,
   commit link) — merging is a reorganisation, not a rewrite.
 - After all components, a single `## Compatibility` heading (see step 6).
+
+After merging, verify that each component heading belongs to the frozen scope
+and each listed component with changes has its entries represented once. If
+the scope is inferred, record which components were discovered, their sources
+and any uncertain omissions; do not claim completeness if discovery is not
+conclusive. Empty changelog headings remain omitted.
 - **No adjacent headings with nothing between them.** Every heading (`#`,
   `##`, `###`, ...) must be followed by at least a short sentence of body
   text before the next heading — even a one-line lead-in — never let one
@@ -1367,7 +1589,9 @@ ensure it is correct and up to date:
 
 - **Single repository**: carry over its per-repo compatibility table as-is
   (it already matches the product template's structure, e.g.
-  `templates/kafka.md.j2`).
+  `templates/kafka.md.j2`) **only when every row matches the selected scope**.
+  Otherwise edit rows in the final page: remove unselected static rows and
+  add verified selected ones in the same format.
 - **Multiple repositories**: add one `### <Component name>` subsection per
   component that has compatibility info, each with its own table, so the
   section stays a single source of truth for the whole product release.
@@ -1399,7 +1623,21 @@ ensure it is correct and up to date:
   and the previous release notes another), don't silently prefer one: quote
   both and ask which is correct.
 
+Under explicit scope, every selected component must be accounted for either
+in a factual Compatibility row/subheading, or as a missing/blocked component
+in the *hidden* review comment and JSON report (never invent a visible row).
+Before handoff, collect known component names from previous notes and the
+template and run `tools/release_scope.py --file <scope-file> --document
+<saved-page> --candidates-file <candidates-file>` (or `--inline-file`), then
+inspect the page for aliases and unmapped headings as well. A non-zero audit
+result means the scope is not verified; in autopilot set status `blocked`.
+
 ### 7. Ask the user (whenever something is genuinely unclear)
+
+**Interactive mode only.** Autopilot never asks, regardless of the wording of
+the bullets below; it records each unresolved fact as a blocker with evidence
+and candidates, produces safe partial artifacts when possible, and stops
+short of claiming a complete page (see "Autopilot").
 
 The governing rule is "Infer what's determinable; ask about what isn't" above:
 **anything ambiguous, contradictory, undefined, or not confidently inferable
@@ -1441,7 +1679,8 @@ Always query the user for a preferred resolution when:
   number").
 - One or more sibling components were detected in the product's previous
   release notes but weren't named by the user (step 1.4.b) — always ask,
-  never include them by default.
+  never include them by default **unless the user provided an exhaustive list**:
+  then record the discrepancy but leave the list unchanged.
 - A confirmed sibling component's GitHub repo can't be determined
   automatically (step 1.4.d) — ask the user for the repository address
   instead of guessing.
@@ -1455,7 +1694,9 @@ Always query the user for a preferred resolution when:
 - The track can't be determined confidently, or the branch and the docs'
   default version imply different tracks (see "Track / channel scope").
 - Sources of truth contradict each other on any fact that reaches the
-  document — product name, version, revision, component list.
+  document — product name, version, revision, component list. When both an
+  exhaustive prompt list and an exhaustive file are present, the **file wins**;
+  report the difference instead of asking which scope to use.
 - No save location can be established, or several candidate release-notes
   folders exist (step 8.1.c).
 - The user's request contains a term, ref or scope you can read more than one
@@ -1542,6 +1783,52 @@ rather than leaving it as an aside — don't accumulate stale TODOs.
 
 ### 8. Save the final document
 
+**Autopilot overrides for this step** (interactive instructions below still
+apply when autopilot is off). In autopilot, prepare the filename and staged
+page now, perform step 9 **on the staged page before committing either final
+artifact**, update the staged page if needed, then return here to compute
+final status and save page+report together. Never save a `review_required`
+JSON with checks yet to be run:
+
+- Choose a unique run ID (UTC timestamp plus a random short suffix). Default
+  report path: `<target-workspace>/.release-notes-review/<product-slug>-<run-id>.json`,
+  outside the docs tree, or a user-supplied report path. This works in
+  standalone and cross-repo modes. Never overwrite either artifact. Require
+  an explicit writable artifact directory if there is no target workspace;
+  otherwise report an `error` in logs rather than claiming a file exists.
+- If a unique destination matching established published-note conventions
+  is available, save the **factual** Markdown page there *only if that
+  filename is unused* and the inferred title is verified. A conflicting
+  existing note is a blocker, not an invitation to replace it. If the
+  publish-location/title cannot be determined, but a partial factual page
+  is possible, save it instead under
+  `<target-workspace>/.release-notes-review/<product-slug>-<run-id>.md`
+  and flag the correct publication path/title as blocked. If no verified
+  component range can be represented, write only the JSON report.
+- Preserve frontmatter as line 1 on a saved page. Put a hidden HTML review
+  comment immediately after it with an exact line `AUTOPILOT STATUS: BLOCKED`
+  or `AUTOPILOT STATUS: REVIEW REQUIRED` matching the JSON status, plus
+  scope source and selected/missing components, refs and SHA evidence,
+  exclusions, checks, and imperative actions for a human reviewer. A blocked
+  page may look like normal release notes but **must not be treated as
+  DA186-complete or approved**. Never put unverified facts in visible prose.
+- Stage the page and write the versioned JSON from "Autopilot report contract"
+  before deleting the system temp directory, using `tools/review_report.py`
+  with both `--page-*` flags when there is a page. Copy exclusion
+  ledgers and every significant decision into the report; a report that
+  merely says "see deleted temp file" is invalid. If report saving fails,
+  log `error` and the paths of any page already written. Never claim a
+  successful handoff without the JSON.
+- In the final chat/log reply give *all* of: final status, Markdown and JSON
+  paths (or explain a missing page), target/product/track, exact component
+  list and candidate omissions, per-component repo/range and counts,
+  exclusions and auto-sort actions, outstanding blockers/TODOs with sources,
+  checks run/skipped/failed, any external file edits (normally **none**),
+  and the explicit **human-review-required; not published** handoff. Do not
+  rely on a green builder exit or chat alone as a CI signal. The JSON status
+  is for a future orchestrator; this skill does not yet expose a process
+  exit code for a whole product run.
+
 1. Determine the save location:
    - **Cross-repo mode** (the currently open workspace is the target repo,
      not release-notes-builder — the common case, see "Installing and running
@@ -1590,6 +1877,26 @@ rather than leaving it as an aside — don't accumulate stale TODOs.
 
 ### 9. Verify with the repo's own docs checks
 
+In autopilot, run available checks non-interactively; do not pause to warn
+the user, change docs-wide config/wordlists, or loop indefinitely. Fix only
+clear problems in the generated page (e.g. backtick a filename), re-run
+checks as practical, and record results including skipped checks and reasons
+in the JSON. Failed or unrun mandatory checks make status `blocked`. Never
+equate a linkcheck exit 0 with a clean page without checking redirects and
+running the auto-link detector.
+
+Run the scope and auto-link checks on the **staged** Markdown in the run's
+temp directory. For Sphinx checks that require the page under `docs/`, place
+a temporary candidate in the intended *unused* release-notes path, run the
+checks, remove the candidate even on failure, and only then commit the final
+page/report with the exclusive no-overwrite helper. Never move an existing
+document or leave an unchecked candidate as the final page. If no unique docs
+path is known, docs checks cannot prove the target page: record `docs` as
+skipped and status `blocked`. If the target repo is not open (standalone),
+record `docs` as not applicable, with the reason, and keep the other checks
+mandatory. A collision during the final save is a blocker/error and never
+causes replacement. Record final results before saving the JSON.
+
 The generated document is not finished until the target repository's own docs
 checks pass on it. Release notes are the single most check-hostile page in a
 charm's docs: they are full of raw PR titles written by developers, which
@@ -1601,7 +1908,7 @@ This step applies in **cross-repo mode** only (the target repo is the open
 workspace, so its `docs/` tree and its checks are available). In standalone
 mode there is no docs build to run against; say so and skip it.
 
-**Warn the user before starting, and say why it takes a while.** `make
+**In interactive mode, warn the user before starting, and say why it takes a while.** `make
 linkcheck` issues a real network request for every external link in the whole
 docs set and commonly takes **several minutes**; a release-notes page adds one
 request per PR link, so a 60-entry document makes this noticeably slower. Tell
@@ -1841,7 +2148,25 @@ hides the problem and leaves the squatted link live in the published page.
 
 ## DA186 compliance checklist
 
-Verify the final document against the spec before saving:
+Verify the final document against the spec before saving. For autopilot, do not
+silently mark an unchecked item complete: record it with a reason in the
+JSON `checks`/`blockers` and set status `blocked`. A blocked partial page is a
+review artifact, *not* a DA186-compliant finished release. Every checkbox
+that says "ask", "confirm", "stop for the user" or "warn" means **record
+the question as a blocker with evidence instead** in autopilot. In
+interactive mode use the confirmations as written.
+
+- [ ] Explicit exhaustive scope (when supplied) was parsed and frozen before
+  detection; file took precedence over inline prompt, and detected
+  siblings, template Compatibility rows and workspace repo did not alter
+  it. The final page's change headings and Compatibility rows reconcile
+  with the frozen list; unresolved selected components are visible as
+  blockers in the review comment/report, never silently dropped.
+- [ ] Autopilot (if requested) did not ask any CLI/agent questions; safe
+  defaults and unresolved decisions are logged. A versioned no-overwrite
+  JSON report exists, each selected component and ref/SHA is accounted
+  for, and status distinguishes `review_required`, `blocked`, or `error`.
+  Human review is required for all statuses; no publishing occurred.
 
 - [ ] Title contains the charm revision (or other unique release designation)
       and the exact date follows it.
