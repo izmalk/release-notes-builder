@@ -16,6 +16,10 @@
      intro_links   - Charmhub / Deploy / Upgrade / System requirements links
      changelog     - the whole "list of changes" section
      security      - product-specific security / CVE section
+     compatibility_heading - the "## Compatibility" heading above the
+                     compatibility block. Products whose published notes have
+                     no Compatibility section (e.g. LXD) override this block
+                     to be empty; overriding it does not affect the table.
      compatibility - compatibility table
      known_issues  - known issues section (commented out by default)
      footer        - anything after the known issues section
@@ -50,9 +54,11 @@
 {% endfor %}
 {% endblock %}
 {% block security %}{% endblock %}
+{% block compatibility_heading %}
 
 ## Compatibility
 
+{% endblock %}
 {% block compatibility %}
 <!-- TODO: Fill in compatibility information for this release. -->
 

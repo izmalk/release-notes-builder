@@ -1,0 +1,138 @@
+{# LXD product template — reproduces the structure of LXD's published release
+   notes in canonical/lxd: doc/reference/release-notes/<track>/release-notes-<ver>.md
+   (reference documents: release-notes-6.10.1.md and release-notes-6.10.0.md).
+
+   How it differs from base.md.j2 and why:
+   - LXD notes have NO date line, NO DA186 intro-links line, and NO
+     Compatibility section — LXD is a snap, not a charm; compatibility facts
+     (minimum Go version, snap channel) live in dedicated sections instead.
+     The base template's hard-coded "## Compatibility" heading is suppressed
+     by overriding the `compatibility_heading` block to be empty.
+   - Section order mirrors the LXD release-notes-template.md convention:
+     frontmatter, anchor, title, LTS/feature sentence, admonition, Highlights,
+     UI updates, Bug fixes, Backwards-incompatible changes, Known issues,
+     Updated minimum Go version, Snap packaging changes, Change log,
+     Downloads.
+   - Entries use LXD's bullet style: "- [{spellexception}`message`](PR URL)"
+     (single links, no commit links, no Jira prefix).
+   - The changelog block maps the builder's fixed DA186 categories onto LXD's
+     own sections: Features → Highlights (agent restructures manually into
+     per-feature ### sections), Bug fixes stay, everything else ("Other
+     improvements", "Breaking changes", "Security") is reorganised by the
+     agent into the LXD sections; the template renders the raw categories and
+     the polish pass reshapes them.
+   - Sections the builder cannot populate (UI updates, Known issues, Go
+     version, Snap packaging) are emitted as clearly marked TODO comments for
+     the agent's polish pass.
+
+   Reference release notes live at:
+   https://github.com/canonical/lxd/blob/main/doc/reference/release-notes/6/
+#}
+{% extends "base.md.j2" %}
+
+{% block frontmatter %}
+---
+myst:
+  html_meta:
+    description: Release notes for LXD {{ title }}, including bugfixes.
+---
+{% endblock %}
+
+{% block title %}
+
+(ref-release-notes-{{ title }})=
+# LXD {{ title }} release notes
+{% endblock %}
+
+{% block date_line %}{% endblock %}
+
+{% block introduction %}
+
+This is a {ref}`LTS release <ref-releases-lts>` and is recommended for production
+use.
+
+<!-- INTRO-TODO: For a feature release use instead:
+     This is a {ref}`feature release <ref-releases-feature>` and is not
+     recommended for production use. -->
+
+```{admonition} Release notes content
+:class: note
+These release notes cover updates in the [core LXD repository](https://github.com/canonical/lxd) and the [LXD snap package](https://snapcraft.io/lxd).
+For a tour of [LXD UI](https://github.com/canonical/lxd-ui) updates, please see the release announcement in [our Discourse forum](https://discourse.ubuntu.com/t/lxd-6-10-1-lts-has-been-released/90024).
+```
+<!-- INTRO-TODO: Replace the Discourse link with this release's announcement,
+     or delete the "For a tour of LXD UI" sentence if there are no UI updates. -->
+{% endblock %}
+
+{% block intro_links %}{% endblock %}
+
+{% block changelog %}
+
+(ref-release-notes-{{ title }}-bugfixes)=
+## Bug fixes
+
+The following bug fixes are included in this release.
+
+<!-- CHANGELOG-TODO: The builder's raw DA186 categories are rendered below
+     (Links to the PRs). The polish pass must reorganise them: move feature
+     entries into a "## Highlights" section with one ### subsection per
+     feature, keep fix entries here in LXD's
+     "- [{spellexception}`msg`](pr-url)" bullet style, and delete this
+     comment and the raw sections. -->
+{% for category in category_order %}
+{% if categories.get(category) %}
+
+## {{ category }}
+
+{% for entry in categories[category] %}
+- {{ entry.message }}{% if entry.pr_number %} ([PR #{{ entry.pr_number }}]({{ entry.pr_url }})){% endif %}
+
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endblock %}
+
+{% block compatibility_heading %}{# LXD notes have no Compatibility section #}{% endblock %}
+{% block compatibility %}{% endblock %}
+
+{% block known_issues %}
+
+(ref-release-notes-{{ title }}-known-issues)=
+## Known issues
+
+<!-- KNOWN-ISSUES-TODO: Add known issues only if evidence exists (check the
+     previous release's known issues that may persist, and issues fixed on
+     main but not backported). Otherwise remove this entire section. -->
+{% endblock %}
+
+{% block footer %}
+
+(ref-release-notes-{{ title }}-go)=
+<!-- GO-TODO: Verify go.mod's minimum Go version at the release tag. If it
+     changed since the previous release, emit:
+## Updated minimum Go version
+
+If you are building LXD from source instead of using a package manager, the
+minimum version of Go required to build LXD is now ?.?.?.
+     If unchanged, delete this comment. -->
+
+(ref-release-notes-{{ title }}-snap)=
+<!-- SNAP-TODO: List snap packaging changes (bundled dependency bumps, new
+     shipped binaries), or delete this comment if none. -->
+
+(ref-release-notes-{{ title }}-changelog)=
+## Change log
+
+View the [complete list of all changes in this release](https://github.com/canonical/lxd/compare/{{ from_ref }}...{{ to_ref }}).
+
+(ref-release-notes-{{ title }}-downloads)=
+## Downloads
+
+The source tarballs and binary clients can be found on our [download page](https://github.com/canonical/lxd/releases/tag/{{ to_ref }}).
+
+Binary packages are also available for:
+
+- **Linux:** `snap install lxd --channel=6/stable`
+- **macOS client:** `brew install lxc`
+- **Windows client:** `choco install lxc`
+{% endblock %}
